@@ -1,3 +1,6 @@
+import { redirect } from 'next/navigation';
+
 export default function Page() {
-  return <h1>Hello, Next.js!</h1>
+  redirect('/login'); // デフォルトでこのページに飛ばされるので、app/loginにリダイレクト
+  return;
 }

@@ -1,7 +1,7 @@
 export default function RootLayout({
   children,
 }: {
-  children: React.ReactNode //形式的なものらしい　何書いてあるかわからん
+  children: React.ReactNode
 }) {
   return (
     <html lang="en">

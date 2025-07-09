@@ -16,6 +16,7 @@
     "esModuleInterop": true,
     "moduleResolution": "node",
     "resolveJsonModule": true,
+    "noUnusedParameters": false,
     "isolatedModules": true,
     "jsx": "preserve",
     "plugins": [
