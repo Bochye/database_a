@@ -1,3 +1,5 @@
+'use client'
+
 import React, { useState } from "react"; //キー入力を受け付けるuseStateをimport
 import styles from './page.module.css'; //CSSをインポート
 

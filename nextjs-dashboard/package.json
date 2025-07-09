@@ -2,6 +2,7 @@
   "name": "my-nextjs-typescript-project",
   "version": "10.9.2",
   "dependencies": {
+    "@prisma/client": "^6.11.1",
     "next": "^15.3.4",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
