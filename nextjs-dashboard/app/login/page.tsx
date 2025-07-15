@@ -16,7 +16,10 @@ const prisma = new PrismaClient()
 
 //const value = await fetch(`http://localhost:3000/api/search_user?user=${encodeURIComponent(setloginid)}&pass=${encodeURIComponent(setpassword)}`).then(res => res.json());
 
+//git config --global user.name "USER_NAME"
+//git config --global user.email "USER_EMAIL"
 
+//213732137+Bochye@users.noreply.github.com
 
 export default function Page() {
 //まだ中身なし
