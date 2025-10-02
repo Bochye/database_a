@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import styles from './page.module.css';
+const { PrismaClient } = require('@prisma/client') ;
+const prisma = new PrismaClient()
 
 /*const handleLogout = () => {
   localStorage.removeItem('loggedInUser');
@@ -25,5 +28,18 @@ export default function DashboardPage() {
 
   if (!user) return <p>Checking...</p>;
 
-  return <h2>Hello, {user}!</h2>;
+  return (
+    <div className={styles.dashboardmain}>
+      <header className={styles.header}>
+        <h1 className={styles.header_title}>
+          資産管理アプリ
+        </h1>
+      </header>
+      <div className={styles.menues}>
+        <div className={styles.yourelogin}>
+          ログイン中<br></br>{user}
+        </div>
+      </div>
+    </div>
+  )
 }

@@ -4,7 +4,8 @@ generator client {
 
 datasource db {
   provider  = "postgresql"
-  url       = "postgresql://postgres.wbxedenipeaguhqndcen:114514810@aws-0-ap-northeast-1.pooler.supabase.com:5432/postgres"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 model Accounts {
@@ -13,3 +14,9 @@ model Accounts {
   password  String
   isadmin      Boolean  @default(false)
 }
+
+model Items{
+  id        Int      @id @default(autoincrement())
+  name    String
+  userid    String
+} 

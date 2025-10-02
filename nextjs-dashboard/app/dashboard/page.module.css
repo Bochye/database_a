@@ -1,0 +1,61 @@
+.header{
+    background-color: rgb(149, 172, 182);
+    width: 100%;
+    height: 50px;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    -index: 999;
+}
+
+.header_title{
+    font-size: 17px;
+    text-align: center;
+    padding: auto;
+}
+
+.dashboardmain{
+    text-align: center;
+    margin: 5% 0;
+}
+
+.passinputs{
+    text-align: center;
+    box-sizing: content-box;
+    width: 30px;
+    height: 80px;
+    background-color: rgb(149, 172, 182);
+    margin-top: 50px;
+    margin-left: auto;
+    margin-right: auto;
+    width: 15em
+}
+
+.passinput{
+    padding-top: 10px;
+}
+
+.menues {
+    text-align: center;
+    box-sizing: border-box;
+    width: 100px;
+    height: 100vh;
+    background-color: rgb(149, 172, 182);
+    position: fixed;
+    top: 0;
+    right: 0;
+    z-index: 999;
+}
+
+.login_text_1{
+    color: #fff;
+    background: #f56500;
+    font-size: 12px;
+    margin: 5px;
+}
+
+.yourelogin{
+    font-size: 10px;
+    margin: 10%;
+}
