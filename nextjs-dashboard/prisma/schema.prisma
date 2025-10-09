@@ -17,6 +17,8 @@ model Accounts {
 
 model Items{
   id        Int      @id @default(autoincrement())
-  name    String
-  userid    String
+  name      String
+  stock     Int      @default(0)
+  ownerid   String
+  createdAt DateTime @default(now())
 } 
