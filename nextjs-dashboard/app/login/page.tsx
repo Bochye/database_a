@@ -30,7 +30,7 @@ export default function Page() {
   const router = useRouter();
 
   const handleLogin = async () => {
-    const url = `http://localhost:3000/api/search_user?user=${encodeURIComponent(str_id)}&pass=${encodeURIComponent(str_pass)}`;
+    const url = `/api/search_user?user=${encodeURIComponent(str_id)}&pass=${encodeURIComponent(str_pass)}`;
     try {
       const response = await fetch(url);
       const result = await response.json();
