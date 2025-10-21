@@ -1,0 +1,182 @@
+/* モーダルオーバーレイ: 中央配置 */
+.modalOverlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5); 
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  z-index: 50;
+}
+
+/* モーダルコンテナ: プレーンなボックス */
+.modalContainer {
+  background-color: #f0f0f0; 
+  border: 1px solid #333; 
+  width: 100%;
+  max-width: 500px;
+  max-height: 90vh;
+  overflow-y: auto;
+  font-family: sans-serif; 
+}
+
+/* ヘッダー: タイトルと閉じるボタンを両端に配置 */
+.modalHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px;
+  border-bottom: 1px solid #ccc;
+  background-color: #ddd; 
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+/* タイトル: テキストのみ */
+.modalTitle {
+  font-size: 16px;
+  font-weight: bold;
+  color: #333;
+}
+
+/* 閉じるボタン: シンプルなボックスとテキスト */
+.closeButton {
+  padding: 5px 8px; 
+  color: #666;
+  border: 1px solid #666;
+  background: #eee;
+  cursor: pointer;
+  font-size: 14px; 
+  line-height: 1; /* テキストの高さ調整 */
+  /* SVGを削除したため、インライン要素として適切に扱う */
+  text-decoration: none; 
+}
+
+.closeButton:hover {
+  background-color: #ccc;
+  color: #000;
+}
+
+
+/* フォーム本体 */
+.formBody {
+  padding: 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* エラーメッセージ */
+.errorMessage {
+  padding: 8px;
+  background-color: #ffeeee;
+  color: #cc0000;
+  border: 1px solid #cc0000;
+  font-size: 12px;
+}
+
+/* フォームグリッド */
+.formGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+@media (min-width: 640px) {
+  .formGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* ラベル全体 */
+.formLabel {
+  display: block;
+}
+
+/* ラベルテキスト */
+.labelText {
+  font-size: 12px;
+  font-weight: bold;
+  color: #333;
+  display: block;
+  margin-bottom: 3px;
+}
+
+/* 必須マーク */
+.requiredStar {
+  color: #cc0000;
+}
+
+/* 入力フィールド */
+.inputField {
+  display: block;
+  width: 100%;
+  padding: 5px;
+  border: 1px solid #666;
+  box-shadow: none;
+  box-sizing: border-box;
+  font-size: 14px;
+}
+
+.inputField:focus {
+  border-color: #000;
+  box-shadow: none;
+  outline: none;
+}
+
+.selectField {
+  background-color: #fff;
+}
+
+/* ボタンコンテナ: ボタンを右寄せ */
+.buttonContainer {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 10px;
+  border-top: 1px solid #ccc;
+}
+
+/* 共通ボタンベース: ローディングテキストの中央配置を考慮し、Flexを再導入 */
+.button {
+  padding: 5px 15px;
+  font-weight: bold;
+  box-shadow: none;
+  cursor: pointer;
+  border: 1px solid #333;
+  margin-left: 5px;
+
+  /* ローディング時のテキストを中央に配置するためにFlexboxを再導入 */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* キャンセルボタン */
+.cancelButton {
+  background-color: #eee;
+  color: #333;
+  margin-right: 5px;
+}
+
+.cancelButton:not(:disabled):hover {
+  background-color: #ccc;
+}
+
+/* 保存ボタン */
+.saveButton {
+  background-color: #333;
+  color: #fff;
+}
+
+.saveButton:not(:disabled):hover {
+  background-color: #555;
+}

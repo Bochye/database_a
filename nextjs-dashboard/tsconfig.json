@@ -30,7 +30,7 @@
     ".next/types/**/*.ts",
     "**/*.ts",
     "**/*.tsx"
-  ],
+, "components/edititem.js", "components/edititems.js"  ],
   "exclude": [
     "node_modules"
   ]

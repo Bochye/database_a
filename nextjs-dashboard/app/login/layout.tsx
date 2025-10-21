@@ -1,11 +1,8 @@
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+// app/login/layout.tsx
+export default function LoginLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <body>{children}</body>
-    </html>
-  )
+    <div>
+      {children}
+    </div>
+  );
 }
