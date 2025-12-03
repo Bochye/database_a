@@ -1,0 +1,51 @@
+.container {
+  margin-top: 15px;
+}
+
+.noteRow {
+  margin-bottom: 10px;
+}
+
+.noteInput {
+  padding: 5px;
+  border: 1px solid #666;
+  font-size: 14px;
+  width: 200px;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+}
+
+.table th, .table td {
+  border: 1px solid #666;
+  padding: 5px;
+  font-size: 12px;
+}
+
+.submit {
+  margin-top: 10px;
+  padding: 5px 12px;
+  border: 1px solid #333;
+  background-color: #333;
+  color: #fff;
+  cursor: pointer;
+}
+
+.submit:hover {
+  background-color: #555;
+}
+
+.historyTitle {
+  margin-top: 15px;
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.historyList {
+  margin-top: 5px;
+  padding-left: 20px;
+  font-size: 12px;
+}

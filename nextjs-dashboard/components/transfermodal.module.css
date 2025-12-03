@@ -1,0 +1,62 @@
+.overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px;
+  z-index: 50;
+}
+
+.modal {
+  background-color: #f0f0f0;
+  border: 1px solid #333;
+  width: 100%;
+  max-width: 400px;
+  padding: 15px;
+  font-family: sans-serif;
+}
+
+.label {
+  display: block;
+  margin-bottom: 10px;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.input {
+  width: 100%;
+  padding: 5px;
+  border: 1px solid #666;
+  font-size: 14px;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 5px;
+}
+
+.cancel, .save {
+  padding: 5px 12px;
+  border: 1px solid #333;
+  cursor: pointer;
+}
+
+.cancel {
+  background-color: #eee;
+}
+
+.cancel:hover {
+  background-color: #ccc;
+}
+
+.save {
+  background-color: #333;
+  color: #fff;
+}
+
+.save:hover {
+  background-color: #555;
+}

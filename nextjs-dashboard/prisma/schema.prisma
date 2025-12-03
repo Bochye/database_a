@@ -9,31 +9,82 @@ datasource db {
 }
 
 model Accounts {
-  id        Int      @id @default(autoincrement()) // ID 自動割り振りの番号
-  userid    String                                 // 任意のＩＤ（例えば、utsugi.s)みたいな
-  password  String                                 // 任意のパスワード
-  isadmin      Boolean  @default(false)            // 管理者かどうか
+  id        Int      @id @default(autoincrement())
+  userid    String
+  password  String
+  isadmin   Boolean  @default(false)
 }
 
-model Items{
-  id        Int      @id @default(autoincrement())           // ID 自動割り振りの番号（資産コードじゃない） //必須！
-  assetCode       String       @unique                       // 資産コード
-  name      String                                           // 名前
-  modelNumber     String?                                    // 型式（型番）
-  acquisitionDate DateTime?                                  // 取得年月日
-  disposalDate    DateTime?                                  // 廃棄年月日
-  acquisitionCost Float?                                     // 取得価額
-  manager         String?                                    // 管理者（使用者）
-  location        String?                                    // 管理場所（使用場所）
-  status          AssetStatus @default(USED)                 // 資産状態
-  stock     Int      @default(0)                             // 個数
-  ownerid   String                                           // 所有者のＩＤ
-  createdAt DateTime @default(now())                         // データの作成日（取得年月日ではない）
+model Items {
+  id               Int                @id @default(autoincrement())
+  assetCode        String             @unique
+  name             String
+  modelNumber      String?
+  acquisitionDate  DateTime?
+  disposalDate     DateTime?
+  acquisitionCost  Float?
+  manager          String?
+  location         String?
+  status           AssetStatus        @default(USED)
+  stock            Int                @default(0)
+  ownerid          String
+  createdAt        DateTime           @default(now())
+
+  InventoryRecords InventoryRecords[]
+  Requests         Requests[]
+
+  InventoryRequests InventoryRequests[]
 }
 
 enum AssetStatus {
-  USED          // 使用中
-  UNUSED        // 未使用
-  UNKNOWN       // 不明
-  DISPOSED      // 除却
+  USED
+  UNUSED
+  UNKNOWN
+  DISPOSED
+}
+
+model InventoryRecords {
+  id         Int      @id @default(autoincrement())
+  itemId     Int
+  ownerId    String
+  confirmedAt DateTime @default(now())
+  note       String?
+  item       Items    @relation(fields: [itemId], references: [id])
+}
+
+model Requests {
+  id          Int       @id @default(autoincrement())
+  itemId      Int
+  requesterId String
+  type        RequestType
+  status      RequestStatus @default(PENDING)
+  note        String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  item        Items     @relation(fields: [itemId], references: [id])
+}
+
+model InventoryRequests {
+  id          Int      @id @default(autoincrement())
+  itemId      Int
+  userId      String
+  newStatus   String?
+  newLocation String?
+  note        String?
+  status      String   @default("PENDING") // PENDING, APPROVED, RESUBMIT
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  item        Items    @relation(fields: [itemId], references: [id])
+}
+
+enum RequestType {
+  REPAIR
+  DISPOSAL
+  SEAL_REISSUE
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }

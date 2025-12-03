@@ -24,7 +24,7 @@
     "typescript": "^5.1.0"
   },
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev -p 80",
     "build": "next build",
     "start": "next start",
     "lint": "eslint --ext .js,.jsx,.ts,.tsx --fix .",

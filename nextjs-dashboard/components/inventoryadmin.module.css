@@ -1,0 +1,23 @@
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th,
+.table td {
+  border: 1px solid #666;
+  padding: 5px;
+  font-size: 12px;
+}
+
+/* Instead of "button", use a class */
+.button {
+  margin: 5px;
+  padding: 5px 10px;
+  border: 1px solid #333;
+  cursor: pointer;
+}
+
+.button:hover {
+  background-color: #ccc;
+}
