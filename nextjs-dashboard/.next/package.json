@@ -1,1 +1,2 @@
-{"type": "commonjs"}
+{"type": "commonjs",
+"dev": "next dev --experimental-https"}
