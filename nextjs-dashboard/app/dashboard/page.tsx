@@ -239,12 +239,6 @@ export default function DashboardPage() {
                                 <button onClick={() => deleteItem(item.id)} className={styles.deleteButton}>削除</button>
                               )}
                             </div>
-                            <InlineActions
-                              itemId={item.id}
-                              currentStatus={item.status}
-                              currentLocation={item.location}
-                              onUpdated={() => fetchItems()}
-                            />
                           </td>
                         </tr>
                       ))}

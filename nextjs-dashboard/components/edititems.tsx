@@ -178,7 +178,7 @@ export default function EditItems({ onClose, onSave, ownerId, initialItem }: Edi
             </label>
 
             <label className={styles.formLabel}>
-              <span className={styles.labelText}>型式 (Model No.)</span>
+              <span className={styles.labelText}>型式</span>
               <input type="text" name="modelNumber" value={formData.modelNumber} onChange={handleChange} className={styles.inputField} />
             </label>
 

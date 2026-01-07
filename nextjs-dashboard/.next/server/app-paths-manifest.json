@@ -1,8 +1,5 @@
 {
-  "/api/search_user/route": "app/api/search_user/route.js",
   "/api/items/route": "app/api/items/route.js",
-  "/api/requests/route": "app/api/requests/route.js",
-  "/page": "app/page.js",
   "/dashboard/page": "app/dashboard/page.js",
   "/login/page": "app/login/page.js"
 }
