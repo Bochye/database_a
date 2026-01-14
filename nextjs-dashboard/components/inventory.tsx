@@ -133,21 +133,33 @@ const loadItems = async () => {
         <h3 style={{ marginBottom: '10px', color: '#4a6fa5', textAlign: 'center' }}>棚卸し実施画面</h3>
         
         {/* ★ 棚卸し名称の表示エリア */}
-        {roundTitle && (
-          <div style={{ textAlign: 'center', marginBottom: '15px' }}>
-            <span style={{ 
-              background: '#e3f2fd', 
-              color: '#1976d2', 
-              padding: '5px 15px', 
-              borderRadius: '20px', 
-              fontSize: '14px', 
+        <div style={{ textAlign: 'center', marginBottom: '15px' }}>
+          {roundTitle && roundTitle !== '-' ? (
+            <span style={{
+              background: '#e3f2fd',
+              color: '#1976d2',
+              padding: '5px 15px',
+              borderRadius: '20px',
+              fontSize: '14px',
               fontWeight: 'bold',
               border: '1px solid #bbdefb'
             }}>
               実施中：{roundTitle}
             </span>
-          </div>
-        )}
+          ) : (
+            <span style={{
+              background: '#f5f5f5',
+              color: '#999',
+              padding: '5px 15px',
+              borderRadius: '20px',
+              fontSize: '14px',
+              fontWeight: 'bold',
+              border: '1px solid #ddd'
+            }}>
+              停止中
+            </span>
+          )}
+        </div>
 
         <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '15px' }}>
           <button className={styles.reloadButton} onClick={loadItems} disabled={loading}>↻ 更新</button>

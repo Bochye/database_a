@@ -10,7 +10,8 @@ export default function InventoryAdmin() {
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<any | null>(null);
   const [newRoundTitle, setNewRoundTitle] = useState('');
-  
+  const [currentRound, setCurrentRound] = useState<{ id: number; title: string } | null>(null);
+
   const [isAdminMode, setIsAdminMode] = useState(true);
   const [adminId, setAdminId] = useState<string | null>(null);
 
@@ -20,9 +21,16 @@ export default function InventoryAdmin() {
       const loggedInUser = localStorage.getItem('loggedInUser');
       setAdminId(loggedInUser);
 
-      const res = await fetch('/api/inventoryrequests');
-      const data = await res.json();
-      setUserStats(data.userStats || {});
+      const [resRequests, resRound] = await Promise.all([
+        fetch('/api/inventoryrequests'),
+        fetch('/api/inventoryrounds')
+      ]);
+
+      const dataRequests = await resRequests.json();
+      const dataRound = await resRound.json();
+
+      setUserStats(dataRequests.userStats || {});
+      setCurrentRound(dataRound.currentRound || null);
     } catch (error) {
       console.error('Load Error:', error);
     } finally {
@@ -41,6 +49,26 @@ export default function InventoryAdmin() {
       body: JSON.stringify({ title: newRoundTitle, adminId: adminId || 'admin' })
     });
     if (res.ok) { setNewRoundTitle(''); load(); alert('開始しました'); }
+  };
+
+  const endCurrentRound = async () => {
+    if (!currentRound) return alert('実施中の棚卸しがありません。');
+    if (!window.confirm(`「${currentRound.title}」を終了しますか？\n報告データは保持されます。`)) return;
+    const res = await fetch('/api/inventoryrounds', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ roundId: currentRound.id })
+    });
+    if (res.ok) { load(); alert('棚卸しを終了しました。'); }
+    else { const err = await res.json(); alert(err.error || '終了に失敗しました。'); }
+  };
+
+  const cancelCurrentRound = async () => {
+    if (!currentRound) return alert('実施中の棚卸しがありません。');
+    if (!window.confirm(`「${currentRound.title}」をキャンセルしますか？\n\n⚠️ 警告：棚卸しと全ての報告データが削除されます。この操作は取り消せません。`)) return;
+    const res = await fetch(`/api/inventoryrounds?roundId=${currentRound.id}`, { method: 'DELETE' });
+    if (res.ok) { load(); alert('棚卸しをキャンセルしました。'); }
+    else { const err = await res.json(); alert(err.error || 'キャンセルに失敗しました。'); }
   };
 
   const applyToMaster = async (userId: string) => {
@@ -82,12 +110,52 @@ export default function InventoryAdmin() {
           </button>
         </div>
 
+        {/* 現在の棚卸し状況 */}
+        {currentRound ? (
+          <div style={{ background: '#e8f5e9', padding: '20px', borderRadius: '1px', marginBottom: '25px', border: '1px solid #4caf50' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+              <div>
+                <h4 style={{ color: '#2e7d32', margin: '0 0 5px 0' }}>実施中の棚卸し</h4>
+                <span style={{ fontSize: '18px', fontWeight: 'bold', color: '#1b5e20' }}>{currentRound.title}</span>
+              </div>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  className={styles.secondaryButton}
+                  style={{ backgroundColor: '#ff9800', color: '#fff', border: 'none' }}
+                  onClick={endCurrentRound}
+                >
+                  終了する
+                </button>
+                <button
+                  className={styles.deleteButton}
+                  onClick={cancelCurrentRound}
+                >
+                  キャンセル
+                </button>
+              </div>
+            </div>
+            <p style={{ fontSize: '12px', color: '#666', margin: 0 }}>
+              ※「終了」: 報告データを保持したまま完了　/　「キャンセル」: 棚卸しと報告データを全て削除
+            </p>
+          </div>
+        ) : (
+          <div style={{ background: '#f5f5f5', padding: '20px', borderRadius: '1px', marginBottom: '25px', border: '1px solid #ddd' }}>
+            <h4 style={{ color: '#999', margin: '0' }}>現在実施中の棚卸しはありません</h4>
+          </div>
+        )}
+
+        {/* 新規棚卸し開始 */}
         <div style={{ background: '#f0f4f8', padding: '20px', borderRadius: '1px', marginBottom: '25px', border: '1px solid #4a6fa5' }}>
-          <h4 style={{ color: '#4a6fa5', margin: '0 0 10px 0' }}>棚卸しのリセットと新規開始</h4>
+          <h4 style={{ color: '#4a6fa5', margin: '0 0 10px 0' }}>新しい棚卸しを開始</h4>
           <div style={{ display: 'flex', gap: '10px' }}>
             <input className={styles.inputField} style={{ flex: 1 }} value={newRoundTitle} onChange={e => setNewRoundTitle(e.target.value)} placeholder="例: 2025年度 棚卸し" />
             <button className={styles.addButton} onClick={startNewRound}>開始</button>
           </div>
+          {currentRound && (
+            <p style={{ fontSize: '12px', color: '#e65100', marginTop: '10px', marginBottom: 0 }}>
+              ※新しい棚卸しを開始すると、現在の棚卸しは自動的に終了します。
+            </p>
+          )}
         </div>
 
         {loading ? (
