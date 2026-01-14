@@ -75,7 +75,7 @@ export default function DashboardPage() {
       
       params.set('isAdmin', adminFlag ? 'true' : 'false');
       if (loggedInUser) {
-        params.set('manager', loggedInUser);
+        params.set('currentUser', loggedInUser);
       }
 
       const res = await fetch(`/api/items?${params.toString()}`);

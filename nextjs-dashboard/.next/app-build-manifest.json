@@ -5,6 +5,22 @@
       "static/chunks/main-app.js",
       "static/chunks/app/layout.js"
     ],
+    "/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/page.js"
+    ],
+    "/dashboard/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/css/app/dashboard/page.css",
+      "static/chunks/app/dashboard/page.js"
+    ],
+    "/api/accounts/route": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/api/accounts/route.js"
+    ],
     "/login/layout": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
@@ -21,17 +37,6 @@
       "static/chunks/main-app.js",
       "static/chunks/app/api/search_user/route.js"
     ],
-    "/dashboard/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/css/app/dashboard/page.css",
-      "static/chunks/app/dashboard/page.js"
-    ],
-    "/api/accounts/route": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/api/accounts/route.js"
-    ],
     "/api/items/route": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
@@ -41,6 +46,11 @@
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/api/inventoryrequests/route.js"
+    ],
+    "/api/requests/route": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/api/requests/route.js"
     ]
   }
 }

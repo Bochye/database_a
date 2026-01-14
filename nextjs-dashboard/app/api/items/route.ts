@@ -16,12 +16,13 @@ export async function GET(req: NextRequest) {
     const location = searchParams.get('location');
     const status = searchParams.get('status');
     const department = searchParams.get('department');
-    
+    const managerFilter = searchParams.get('manager'); // 検索フィルター用の管理者名
+
     // 閲覧制限のためのパラメータ
     const isAdmin = searchParams.get('isAdmin') === 'true';
     const onlyMine = searchParams.get('onlyMine') === 'true';
-    // ログイン中のユーザー名を特定するためのパラメータ (manager または ownerId から取得)
-    const currentUserName = searchParams.get('manager') || searchParams.get('ownerId') || searchParams.get('ownerid');
+    // ログイン中のユーザー名を特定するためのパラメータ
+    const currentUserName = searchParams.get('currentUser') || searchParams.get('ownerId') || searchParams.get('ownerid');
 
     const where: any = {};
 
@@ -33,7 +34,7 @@ export async function GET(req: NextRequest) {
     if (status) where.status = status;
     if (department) where.department = department;
 
-    // 2. セキュリティ/閲覧制限ロジック (managerを参照)
+    // 2. セキュリティ/閲覧制限ロジック
     if (!isAdmin) {
       // 一般ユーザーの場合：自分が manager である資産のみに強制制限
       if (!currentUserName) {
@@ -41,11 +42,15 @@ export async function GET(req: NextRequest) {
       }
       where.manager = currentUserName;
     } else {
-      // 管理者の場合：onlyMineチェック時のみ自分の manager 分で絞り込み
+      // 管理者の場合
       if (onlyMine && currentUserName) {
+        // onlyMineチェック時：自分の資産のみ
         where.manager = currentUserName;
+      } else if (managerFilter) {
+        // 管理者名での検索フィルター（部分一致）
+        where.manager = { contains: managerFilter };
       }
-      // それ以外(onlyMine=false)の場合は検索フィルタのみ(全件対象)
+      // それ以外(onlyMine=false かつ フィルターなし)の場合は全件対象
     }
 
 // GET メソッド内

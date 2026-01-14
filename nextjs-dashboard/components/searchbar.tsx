@@ -20,7 +20,7 @@ export interface SearchFilters {
 }
 
 export default function SearchBar({ onSearch, isAdmin }: Props) {
-  // ページ側のkeyが更新されると、このuseStateも初期値に戻ります
+  // ページ側のkeyが更新されると、このuseStateも初期値に戻る
   const [filters, setFilters] = useState<SearchFilters>({
     assetCode: '',
     name: '',
@@ -42,14 +42,20 @@ export default function SearchBar({ onSearch, isAdmin }: Props) {
     onSearch({ ...filters, onlyMine: isAdmin ? filters.onlyMine : true });
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleSearch();
+    }
+  };
+
   return (
     <div className={styles.container}>
       <div className={styles.inputGroup}>
-        <input name="assetCode" className={styles.input} placeholder="資産コード" value={filters.assetCode} onChange={handleChange} />
-        <input name="name" className={styles.input} placeholder="資産名" value={filters.name} onChange={handleChange} />
-        <input name="modelNumber" className={styles.input} placeholder="型式名" value={filters.modelNumber} onChange={handleChange} />
-        <input name="manager" className={styles.input} placeholder="管理者名" value={filters.manager} onChange={handleChange} />
-        <input name="location" className={styles.input} placeholder="管理場所" value={filters.location} onChange={handleChange} />
+        <input name="assetCode" className={styles.input} placeholder="資産コード" value={filters.assetCode} onChange={handleChange} onKeyDown={handleKeyDown} />
+        <input name="name" className={styles.input} placeholder="資産名" value={filters.name} onChange={handleChange} onKeyDown={handleKeyDown} />
+        <input name="modelNumber" className={styles.input} placeholder="型式名" value={filters.modelNumber} onChange={handleChange} onKeyDown={handleKeyDown} />
+        <input name="manager" className={styles.input} placeholder="管理者名" value={filters.manager} onChange={handleChange} onKeyDown={handleKeyDown} />
+        <input name="location" className={styles.input} placeholder="管理場所" value={filters.location} onChange={handleChange} onKeyDown={handleKeyDown} />
       </div>
 
       <div className={styles.filterGroup}>
