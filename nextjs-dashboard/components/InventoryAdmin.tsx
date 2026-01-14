@@ -54,21 +54,39 @@ export default function InventoryAdmin() {
   const endCurrentRound = async () => {
     if (!currentRound) return alert('実施中の棚卸しがありません。');
     if (!window.confirm(`「${currentRound.title}」を終了しますか？\n報告データは保持されます。`)) return;
-    const res = await fetch('/api/inventoryrounds', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ roundId: currentRound.id })
-    });
-    if (res.ok) { load(); alert('棚卸しを終了しました。'); }
-    else { const err = await res.json(); alert(err.error || '終了に失敗しました。'); }
+    try {
+      const res = await fetch('/api/inventoryrounds', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roundId: currentRound.id })
+      });
+      if (res.ok) { load(); alert('棚卸しを終了しました。'); }
+      else {
+        const text = await res.text();
+        const err = text ? JSON.parse(text) : {};
+        alert(err.error || '終了に失敗しました。');
+      }
+    } catch (e) {
+      console.error('End round error:', e);
+      alert('終了処理中にエラーが発生しました。');
+    }
   };
 
   const cancelCurrentRound = async () => {
     if (!currentRound) return alert('実施中の棚卸しがありません。');
     if (!window.confirm(`「${currentRound.title}」をキャンセルしますか？\n\n⚠️ 警告：棚卸しと全ての報告データが削除されます。この操作は取り消せません。`)) return;
-    const res = await fetch(`/api/inventoryrounds?roundId=${currentRound.id}`, { method: 'DELETE' });
-    if (res.ok) { load(); alert('棚卸しをキャンセルしました。'); }
-    else { const err = await res.json(); alert(err.error || 'キャンセルに失敗しました。'); }
+    try {
+      const res = await fetch(`/api/inventoryrounds?roundId=${currentRound.id}`, { method: 'DELETE' });
+      if (res.ok) { load(); alert('棚卸しをキャンセルしました。'); }
+      else {
+        const text = await res.text();
+        const err = text ? JSON.parse(text) : {};
+        alert(err.error || 'キャンセルに失敗しました。');
+      }
+    } catch (e) {
+      console.error('Cancel round error:', e);
+      alert('キャンセル処理中にエラーが発生しました。');
+    }
   };
 
   const applyToMaster = async (userId: string) => {
