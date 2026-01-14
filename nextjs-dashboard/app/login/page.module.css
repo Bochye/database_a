@@ -1,9 +1,9 @@
 .loginContainer {
   background-color: #f5f5f5;
-  min-height: 100px;
+  min-height: 100vh;
   display: flex;
   justify-content: center;
-  align-items: top;
+  align-items: flex-start;
   padding-top: 100px;
 }
 
