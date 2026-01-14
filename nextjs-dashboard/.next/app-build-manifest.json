@@ -51,6 +51,11 @@
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/api/requests/route.js"
+    ],
+    "/api/inventoryrounds/route": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/api/inventoryrounds/route.js"
     ]
   }
 }

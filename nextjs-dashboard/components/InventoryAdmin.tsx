@@ -75,7 +75,8 @@ export default function InventoryAdmin() {
     <div className={styles.tabContent}>
       <div className={styles.tableContainer}>
         
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '15px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px' }}>
+          <button className={styles.reloadButton} onClick={load} disabled={loading}>↻ 更新</button>
           <button className={styles.editButton} style={{ backgroundColor: '#607d8b' }} onClick={() => setIsAdminMode(false)}>
             👤 自分の資産を棚卸しする
           </button>

@@ -1,4 +1,7 @@
 {
+  "/api/inventoryrequests/route": "app/api/inventoryrequests/route.js",
+  "/api/search_user/route": "app/api/search_user/route.js",
+  "/api/accounts/route": "app/api/accounts/route.js",
   "/api/items/route": "app/api/items/route.js",
   "/dashboard/page": "app/dashboard/page.js",
   "/login/page": "app/login/page.js"

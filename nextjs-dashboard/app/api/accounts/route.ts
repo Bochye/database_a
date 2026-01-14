@@ -25,6 +25,13 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { userid, password, isadmin, department } = body;
     if (!userid || !password) return NextResponse.json({ error: '入力不足です' }, { status: 400 });
+
+    // ユーザーIDの重複チェック
+    const existing = await prisma.accounts.findFirst({ where: { userid } });
+    if (existing) {
+      return NextResponse.json({ error: 'このユーザーIDは既に使用されています。' }, { status: 409 });
+    }
+
     const created = await prisma.accounts.create({
       data: { userid, password, isadmin: !!isadmin, department: department || 'CS' },
     });
@@ -51,6 +58,14 @@ export async function PATCH(req: NextRequest) {
     }
 
     const oldUserId = currentUser.userid;
+
+    // ユーザーIDを変更する場合、重複チェック
+    if (userid && userid !== oldUserId) {
+      const existing = await prisma.accounts.findFirst({ where: { userid } });
+      if (existing) {
+        return NextResponse.json({ error: 'このユーザーIDは既に使用されています。' }, { status: 409 });
+      }
+    }
 
     // トランザクションを使用して、ユーザーと資産を同時に更新
     const result = await prisma.$transaction(async (tx) => {

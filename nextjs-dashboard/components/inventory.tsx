@@ -149,6 +149,10 @@ const loadItems = async () => {
           </div>
         )}
 
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '15px' }}>
+          <button className={styles.reloadButton} onClick={loadItems} disabled={loading}>↻ 更新</button>
+        </div>
+
         <p style={{ fontSize: '13px', color: '#666', marginBottom: '20px', textAlign: 'center' }}>
           ※資産を選択して現在の状況を報告してください。
         </p>
