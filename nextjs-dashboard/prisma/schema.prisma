@@ -13,6 +13,7 @@ model Accounts {
   userid    String
   password  String
   isadmin   Boolean  @default(false)
+  department Department @default(CS)
 }
 
 model Items {
@@ -28,7 +29,11 @@ model Items {
   status           AssetStatus        @default(USED)
   stock            Int                @default(0)
   ownerid          String
+  department       Department         @default(CS)
   createdAt        DateTime           @default(now())
+
+  updatedBy       String?            // 最終更新者のユーザーID
+  updatedAt       DateTime           @updatedAt // 保存時に自動で現在時刻が入る
 
   InventoryRecords InventoryRecords[]
   Requests         Requests[]
@@ -43,25 +48,53 @@ enum AssetStatus {
   DISPOSED
 }
 
-model InventoryRecords {
-  id         Int      @id @default(autoincrement())
-  itemId     Int
-  ownerId    String
-  confirmedAt DateTime @default(now())
-  note       String?
-  item       Items    @relation(fields: [itemId], references: [id])
+enum Department {
+  AD
+  EE
+  ME
+  CS
 }
 
-model Requests {
-  id          Int       @id @default(autoincrement())
+// 1. 棚卸しの「実施期間」を管理するテーブルを追加
+model InventoryRounds {
+  id          Int      @id @default(autoincrement())
+  title       String   // 例: "2025年度"
+  isCurrent   Boolean  @default(true) // 現在アクティブな棚卸し期間かどうか
+  createdAt   DateTime @default(now())
+  createdBy   String   // 開始した管理者のID
+  records     InventoryRecords[]
+}
+
+// 2. 棚卸しの「回答結果」テーブルを修正
+model InventoryRecords {
+  id          Int      @id @default(autoincrement())
   itemId      Int
-  requesterId String
-  type        RequestType
-  status      RequestStatus @default(PENDING)
+  ownerId     String
+  roundId     Int      //どの棚卸し期間に対する回答か
+  isApproved  Boolean         @default(false)
+　newStock    Int?
+  newLocation String?  // 回答時の場所
+  newStatus   AssetStatus? // 回答時のステータス
+  confirmedAt DateTime @default(now())
   note        String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  item        Items     @relation(fields: [itemId], references: [id])
+
+  item        Items           @relation(fields: [itemId], references: [id])
+  round       InventoryRounds @relation(fields: [roundId], references: [id])
+
+  // 同じ「期間」に「同じ資産」を2度回答できないように制約
+  @@unique([itemId, roundId])
+}
+model Requests {
+  id           Int           @id @default(autoincrement())
+  itemId       Int
+  requesterId  String
+  type         RequestType
+  status       RequestStatus @default(PENDING)
+  note         String?       // 申請者（ユーザー）の備考
+  adminNote    String?       // 管理者（Admin）からの備考・回答
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt  
+  item         Items         @relation(fields: [itemId], references: [id])
 }
 
 model InventoryRequests {

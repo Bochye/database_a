@@ -1,50 +1,54 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, AssetStatus } from '@prisma/client';
 
 const prisma = new PrismaClient();
-
-export async function GET(req: NextRequest) {
-  try {
-    const { searchParams } = new URL(req.url);
-    const ownerId = searchParams.get('ownerId');
-    if (!ownerId) return NextResponse.json({ error: 'ownerIdが必要です。' }, { status: 400 });
-
-    const records = await prisma.inventoryRecords.findMany({
-      where: { ownerId },
-      orderBy: { confirmedAt: 'desc' },
-      include: { item: true },
-    });
-
-    return NextResponse.json({ records }, { status: 200 });
-  } catch (e) {
-    console.error(e);
-    return NextResponse.json({ error: '取得に失敗しました。' }, { status: 500 });
-  } finally {
-    await prisma.$disconnect();
-  }
-}
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { ownerId, itemIds, note } = body;
-    if (!ownerId || !Array.isArray(itemIds) || itemIds.length === 0) {
-      return NextResponse.json({ error: 'ownerId と itemIds が必要です。' }, { status: 400 });
+    const { itemId, userId, newStatus, newLocation } = body;
+
+    // 1. 現在アクティブな棚卸し期間（Round）を取得
+    const currentRound = await prisma.inventoryRounds.findFirst({
+      where: { isCurrent: true },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    if (!currentRound) {
+      return NextResponse.json({ error: '現在アクティブな棚卸し期間がありません。' }, { status: 400 });
     }
 
-    const created = await prisma.$transaction(
-      itemIds.map((id: number) =>
-        prisma.inventoryRecords.create({
-          data: {
-            ownerId,
-            itemId: Number(id),
-            note: note || null,
+    const result = await prisma.$transaction(async (tx) => {
+      // 2. 回答を記録 (エラー修正箇所: numberを直接入れず、connectを使用する)
+      const record = await tx.inventoryRecords.create({
+        data: {
+          ownerId: userId,
+          newLocation: newLocation,
+          newStatus: newStatus as AssetStatus,
+          // 直接 ID を入れるのではなく、リレーションとして接続する
+          item: {
+            connect: { id: Number(itemId) }
           },
-        })
-      )
-    );
+          round: {
+            connect: { id: currentRound.id }
+          }
+        },
+      });
 
-    return NextResponse.json({ records: created }, { status: 201 });
+      // 3. 資産マスターを更新
+      await tx.items.update({
+        where: { id: Number(itemId) },
+        data: {
+          location: newLocation,
+          status: newStatus as AssetStatus,
+          updatedBy: userId,
+        }
+      });
+
+      return record;
+    });
+
+    return NextResponse.json({ record: result }, { status: 201 });
   } catch (e) {
     console.error(e);
     return NextResponse.json({ error: '登録に失敗しました。' }, { status: 500 });

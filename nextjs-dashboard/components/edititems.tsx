@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import styles from './edititems.module.css';
+// 自動生成関数をインポート（パスは環境に合わせて調整してください）
+import { generateAssetCode } from '../app/api/utils/generateAssetCode';
 
 export interface ClientItem {
   id: number;
@@ -56,6 +58,9 @@ export default function EditItems({ onClose, onSave, ownerId, initialItem }: Edi
   const [formData, setFormData] = useState<FormState>(initialFormState);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // 手動入力を有効にするかどうかのフラグ
+  const [isManualCode, setIsManualCode] = useState(false);
 
   const isEditing = !!initialItem;
   const modalTitle = isEditing ? '資産情報の編集' : '新規資産の追加';
@@ -76,8 +81,10 @@ export default function EditItems({ onClose, onSave, ownerId, initialItem }: Edi
         status: initialItem.status,
         stock: initialItem.stock ?? 1,
       });
+      setIsManualCode(true); // 編集時は既存コードがあるため手動モード
     } else {
       setFormData(initialFormState);
+      setIsManualCode(false); // 新規時はデフォルト自動生成
     }
   }, [initialItem]);
 
@@ -96,29 +103,58 @@ export default function EditItems({ onClose, onSave, ownerId, initialItem }: Edi
     setIsLoading(true);
     setError(null);
 
-    if (!formData.code || !formData.name) {
-      setError('資産コードと資産名は必須です。');
+    // 基本バリデーション
+    if (!formData.name) {
+      setError('資産名は必須です。');
       setIsLoading(false);
       return;
     }
 
-    const payload = {
-      ...(isEditing && { id: formData.id }),
-      assetCode: formData.code,
-      name: formData.name,
-      modelNumber: formData.modelNumber || undefined,
-      acquisitionDate: formData.acquisitionAt || undefined,
-      disposalDate: formData.disposalAt || undefined,
-      acquisitionCost: formData.value,
-      manager: formData.manager || undefined,
-      location: formData.location || undefined,
-      status: formData.status,
-      stock: formData.stock,
-      ownerid: ownerId,
-    };
+    if ((isEditing || isManualCode) && !formData.code) {
+      setError('資産コードを入力してください。');
+      setIsLoading(false);
+      return;
+    }
 
-    const method = isEditing ? 'PUT' : 'POST';
     try {
+      // 1. 管理者の存在チェック
+      if (formData.manager) {
+        const checkRes = await fetch(`/api/accounts?userid=${formData.manager}`);
+        const checkData = await checkRes.json();
+        const userExists = checkData.accounts?.some((u: any) => u.userid === formData.manager);
+        
+        if (!userExists) {
+          throw new Error(`管理者「${formData.manager}」は登録されていません。`);
+        }
+      }
+
+      // 2. 資産コードの決定
+      let finalAssetCode = formData.code;
+      if (!isEditing && !isManualCode) {
+        // 自動生成モード
+        const baseDate = formData.acquisitionAt || new Date().toISOString();
+        const tempId = Math.floor(Math.random() * 99999); 
+        finalAssetCode = generateAssetCode(baseDate, tempId);
+      }
+
+      // 3. ペイロード作成
+      const payload = {
+        ...(isEditing && { id: formData.id }),
+        assetCode: finalAssetCode,
+        name: formData.name,
+        modelNumber: formData.modelNumber || undefined,
+        acquisitionDate: formData.acquisitionAt || undefined,
+        disposalDate: formData.disposalAt || undefined,
+        acquisitionCost: formData.value,
+        manager: formData.manager || undefined,
+        location: formData.location || undefined,
+        status: formData.status,
+        stock: formData.stock,
+        ownerid: ownerId,
+      };
+
+      // 4. API送信
+      const method = isEditing ? 'PUT' : 'POST';
       const res = await fetch('/api/items', {
         method,
         headers: { 'Content-Type': 'application/json' },
@@ -129,7 +165,10 @@ export default function EditItems({ onClose, onSave, ownerId, initialItem }: Edi
         const errData = await res.json();
         throw new Error(errData.error || `資産の${actionText}に失敗しました。`);
       }
+
       const { item: serverItem } = await res.json();
+      
+      // クライアント側へ返す型へ整形
       const clientItem: ClientItem = {
         id: serverItem.id,
         code: serverItem.assetCode,
@@ -167,10 +206,31 @@ export default function EditItems({ onClose, onSave, ownerId, initialItem }: Edi
           {error && <div className={styles.errorMessage}>{error}</div>}
 
           <div className={styles.formGrid}>
-            <label className={styles.formLabel}>
-              <span className={styles.labelText}>資産コード <span className={styles.requiredStar}>*</span></span>
-              <input type="text" name="code" value={formData.code} onChange={handleChange} required className={styles.inputField} />
-            </label>
+            {/* 資産コード・自動生成セクション */}
+            <div className={styles.assetCodeContainer}>
+              <label className={styles.labelText}>
+                資産コード <span className={styles.requiredStar}>*</span>
+              </label>
+              <input 
+                type="text" 
+                name="code" 
+                value={(!isEditing && !isManualCode) ? '保存時に自動生成されます' : formData.code} 
+                onChange={handleChange} 
+                readOnly={!isManualCode && !isEditing} 
+                className={`${styles.inputField} ${(!isManualCode && !isEditing) ? styles.autoGeneratedInput : ''}`} 
+                placeholder={isManualCode ? "資産コードを入力" : ""}
+              />
+              {!isEditing && (
+                <label className={styles.manualCheckLabel}>
+                  <input 
+                    type="checkbox" 
+                    checked={isManualCode} 
+                    onChange={(e) => setIsManualCode(e.target.checked)} 
+                  />
+                  <span>手動で入力する</span>
+                </label>
+              )}
+            </div>
 
             <label className={styles.formLabel}>
               <span className={styles.labelText}>資産名 <span className={styles.requiredStar}>*</span></span>
@@ -199,7 +259,14 @@ export default function EditItems({ onClose, onSave, ownerId, initialItem }: Edi
 
             <label className={styles.formLabel}>
               <span className={styles.labelText}>管理者</span>
-              <input type="text" name="manager" value={formData.manager} onChange={handleChange} className={styles.inputField} />
+              <input 
+                type="text" 
+                name="manager" 
+                value={formData.manager} 
+                onChange={handleChange} 
+                className={styles.inputField} 
+                placeholder="登録済みのユーザーID"
+              />
             </label>
 
             <label className={styles.formLabel}>
@@ -224,10 +291,10 @@ export default function EditItems({ onClose, onSave, ownerId, initialItem }: Edi
           </div>
 
           <div className={styles.buttonContainer}>
-            <button type="button" onClick={onClose} className={`${styles.button} ${styles.cancelButton} ${isLoading ? styles.disabled : ''}`} disabled={isLoading}>
+            <button type="button" onClick={onClose} className={`${styles.button} ${styles.cancelButton}`} disabled={isLoading}>
               キャンセル
             </button>
-            <button type="submit" className={`${styles.button} ${styles.saveButton} ${isLoading ? styles.disabled : ''}`} disabled={isLoading}>
+            <button type="submit" className={`${styles.button} ${styles.saveButton}`} disabled={isLoading}>
               {isLoading ? `${actionText}中...` : actionText}
             </button>
           </div>

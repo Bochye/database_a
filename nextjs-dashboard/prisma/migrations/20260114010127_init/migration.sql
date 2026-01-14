@@ -2,6 +2,9 @@
 CREATE TYPE "AssetStatus" AS ENUM ('USED', 'UNUSED', 'UNKNOWN', 'DISPOSED');
 
 -- CreateEnum
+CREATE TYPE "Department" AS ENUM ('AD', 'EE', 'ME', 'CS');
+
+-- CreateEnum
 CREATE TYPE "RequestType" AS ENUM ('REPAIR', 'DISPOSAL', 'SEAL_REISSUE');
 
 -- CreateEnum
@@ -13,6 +16,7 @@ CREATE TABLE "Accounts" (
     "userid" TEXT NOT NULL,
     "password" TEXT NOT NULL,
     "isadmin" BOOLEAN NOT NULL DEFAULT false,
+    "department" "Department" NOT NULL DEFAULT 'CS',
 
     CONSTRAINT "Accounts_pkey" PRIMARY KEY ("id")
 );
@@ -31,9 +35,23 @@ CREATE TABLE "Items" (
     "status" "AssetStatus" NOT NULL DEFAULT 'USED',
     "stock" INTEGER NOT NULL DEFAULT 0,
     "ownerid" TEXT NOT NULL,
+    "department" "Department" NOT NULL DEFAULT 'CS',
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedBy" TEXT,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "Items_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "InventoryRounds" (
+    "id" SERIAL NOT NULL,
+    "title" TEXT NOT NULL,
+    "isCurrent" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "createdBy" TEXT NOT NULL,
+
+    CONSTRAINT "InventoryRounds_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -41,6 +59,11 @@ CREATE TABLE "InventoryRecords" (
     "id" SERIAL NOT NULL,
     "itemId" INTEGER NOT NULL,
     "ownerId" TEXT NOT NULL,
+    "roundId" INTEGER NOT NULL,
+    "isApproved" BOOLEAN NOT NULL DEFAULT false,
+    "newStock" INTEGER,
+    "newLocation" TEXT,
+    "newStatus" "AssetStatus",
     "confirmedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "note" TEXT,
 
@@ -55,6 +78,7 @@ CREATE TABLE "Requests" (
     "type" "RequestType" NOT NULL,
     "status" "RequestStatus" NOT NULL DEFAULT 'PENDING',
     "note" TEXT,
+    "adminNote" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
@@ -79,8 +103,14 @@ CREATE TABLE "InventoryRequests" (
 -- CreateIndex
 CREATE UNIQUE INDEX "Items_assetCode_key" ON "Items"("assetCode");
 
+-- CreateIndex
+CREATE UNIQUE INDEX "InventoryRecords_itemId_roundId_key" ON "InventoryRecords"("itemId", "roundId");
+
 -- AddForeignKey
 ALTER TABLE "InventoryRecords" ADD CONSTRAINT "InventoryRecords_itemId_fkey" FOREIGN KEY ("itemId") REFERENCES "Items"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "InventoryRecords" ADD CONSTRAINT "InventoryRecords_roundId_fkey" FOREIGN KEY ("roundId") REFERENCES "InventoryRounds"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Requests" ADD CONSTRAINT "Requests_itemId_fkey" FOREIGN KEY ("itemId") REFERENCES "Items"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

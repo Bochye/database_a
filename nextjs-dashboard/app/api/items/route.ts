@@ -1,114 +1,130 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient, AssetStatus } from '@prisma/client';
+import { PrismaClient, AssetStatus, Department } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-// List with optional filters
+// --- 一覧取得 (GET) ---
+// 権限(isAdmin)とユーザー名(managerParam)に基づいて閲覧範囲を強制制限
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const q = searchParams.get('q') || '';
-    const status = searchParams.get('status') || '';
-    const ownerId = searchParams.get('ownerId') || '';
+    
+    // クエリパラメータの取得
+    const assetCode = searchParams.get('assetCode');
+    const name = searchParams.get('name');
+    const modelNumber = searchParams.get('modelNumber');
+    const location = searchParams.get('location');
+    const status = searchParams.get('status');
+    const department = searchParams.get('department');
+    
+    // 閲覧制限のためのパラメータ
+    const isAdmin = searchParams.get('isAdmin') === 'true';
     const onlyMine = searchParams.get('onlyMine') === 'true';
+    // ログイン中のユーザー名を特定するためのパラメータ (manager または ownerId から取得)
+    const currentUserName = searchParams.get('manager') || searchParams.get('ownerId') || searchParams.get('ownerid');
 
     const where: any = {};
 
-    if (q) {
-      where.OR = [
-        { assetCode: { contains: q } },
-        { name: { contains: q } },
-        { location: { contains: q } },
-        { manager: { contains: q } },
-      ];
-    }
-    if (status && Object.keys(AssetStatus).includes(status)) {
-      where.status = status as AssetStatus;
-    }
-    if (onlyMine && ownerId) {
-      where.ownerid = ownerId;
+    // 1. 基本検索フィルタ (部分一致)
+    if (assetCode) where.assetCode = { contains: assetCode };
+    if (name) where.name = { contains: name };
+    if (modelNumber) where.modelNumber = { contains: modelNumber };
+    if (location) where.location = { contains: location };
+    if (status) where.status = status;
+    if (department) where.department = department;
+
+    // 2. セキュリティ/閲覧制限ロジック (managerを参照)
+    if (!isAdmin) {
+      // 一般ユーザーの場合：自分が manager である資産のみに強制制限
+      if (!currentUserName) {
+        return NextResponse.json({ items: [] }, { status: 200 });
+      }
+      where.manager = currentUserName;
+    } else {
+      // 管理者の場合：onlyMineチェック時のみ自分の manager 分で絞り込み
+      if (onlyMine && currentUserName) {
+        where.manager = currentUserName;
+      }
+      // それ以外(onlyMine=false)の場合は検索フィルタのみ(全件対象)
     }
 
-    const items = await prisma.items.findMany({
-      where,
-      orderBy: { id: 'desc' },
-    });
+// GET メソッド内
+const items = await prisma.items.findMany({
+  where,
+  include: {
+    InventoryRecords: {
+      where: {
+        round: { isCurrent: true } 
+      },
+      select: {
+        id: true,
+        isApproved: true // 承認フラグを含めることでUI側で判定可能にする
+      }
+    }
+  },
+  orderBy: { id: 'desc' },
+});
+    
     return NextResponse.json({ items }, { status: 200 });
   } catch (error) {
     console.error('Error fetching items:', error);
-    return NextResponse.json({ message: 'Failed to fetch items.' }, { status: 500 });
+    return NextResponse.json({ error: '資産データの取得に失敗しました。' }, { status: 500 });
   } finally {
     await prisma.$disconnect();
   }
 }
 
+// --- 新規登録 (POST) ---
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const {
-      assetCode,
-      name,
-      modelNumber,
-      acquisitionDate,
-      disposalDate,
-      acquisitionCost,
-      manager,
-      location,
-      status,
-      stock,
-      ownerid,
+      assetCode, name, modelNumber, acquisitionDate, disposalDate,
+      acquisitionCost, manager, location, status, stock, ownerid, department, updatedBy
     } = body;
 
     if (!assetCode || !name || !ownerid) {
-      return NextResponse.json({ error: '必須項目（資産コード、資産名、所有者ID）が不足しています。' }, { status: 400 });
+      return NextResponse.json({ error: '必須項目が不足しています。' }, { status: 400 });
     }
 
     const newItem = await prisma.items.create({
       data: {
         assetCode,
         name,
-        modelNumber,
+        modelNumber: modelNumber || null,
         acquisitionDate: acquisitionDate ? new Date(acquisitionDate) : null,
         disposalDate: disposalDate ? new Date(disposalDate) : null,
         acquisitionCost: acquisitionCost ? Number(acquisitionCost) : null,
-        manager,
-        location,
-        status: status || 'USED',
-        stock: stock ?? 1,
-        ownerid,
+        manager: manager || null,
+        location: location || null,
+        status: (status as AssetStatus) || AssetStatus.USED,
+        stock: stock != null ? Number(stock) : 0,
+        ownerid: ownerid,
+        department: (department as Department) || Department.CS,
+        updatedBy: updatedBy || ownerid,
       },
     });
 
     return NextResponse.json({ item: newItem }, { status: 201 });
   } catch (error: any) {
-    console.error('Error creating item:', error);
-    const msg = error?.code === 'P2002' ? '資産コードが重複しています。' : '資産追加に失敗しました。';
+    const msg = error?.code === 'P2002' ? '資産コードが重複しています。' : '資産の追加に失敗しました。';
     return NextResponse.json({ error: msg }, { status: 500 });
   } finally {
     await prisma.$disconnect();
   }
 }
 
+// --- 全更新 (PUT) ---
 export async function PUT(req: NextRequest) {
   try {
     const body = await req.json();
     const {
-      id,
-      assetCode,
-      name,
-      modelNumber,
-      acquisitionDate,
-      disposalDate,
-      acquisitionCost,
-      manager,
-      location,
-      status,
-      stock,
-      ownerid,
+      id, assetCode, name, modelNumber, acquisitionDate, disposalDate,
+      acquisitionCost, manager, location, status, stock, ownerid, department, updatedBy
     } = body;
 
     if (!id || !assetCode || !name || !ownerid) {
-      return NextResponse.json({ error: '更新に必要な項目（ID, 資産コード, 資産名, 所有者ID）が不足しています。' }, { status: 400 });
+      return NextResponse.json({ error: '更新に必要な項目が不足しています。' }, { status: 400 });
     }
 
     const updatedItem = await prisma.items.update({
@@ -116,42 +132,52 @@ export async function PUT(req: NextRequest) {
       data: {
         assetCode,
         name,
-        modelNumber,
+        modelNumber: modelNumber || null,
         acquisitionDate: acquisitionDate ? new Date(acquisitionDate) : null,
         disposalDate: disposalDate ? new Date(disposalDate) : null,
         acquisitionCost: acquisitionCost ? Number(acquisitionCost) : null,
-        manager,
-        location,
-        status: status || 'USED',
-        stock: stock ?? 1,
-        ownerid,
+        manager: manager || null,
+        location: location || null,
+        status: (status as AssetStatus) || AssetStatus.USED,
+        stock: stock != null ? Number(stock) : 0,
+        ownerid: ownerid,
+        department: (department as Department) || Department.CS,
+        updatedBy: updatedBy || null,
       },
     });
 
     return NextResponse.json({ item: updatedItem }, { status: 200 });
   } catch (error: any) {
-    if (error.code === 'P2025') {
-      return NextResponse.json({ error: '指定された資産IDが見つかりませんでした。' }, { status: 404 });
-    }
-    console.error('Error updating item:', error);
-    return NextResponse.json({ error: '資産更新に失敗しました。' }, { status: 500 });
+    if (error.code === 'P2025') return NextResponse.json({ error: '資産が見つかりません。' }, { status: 404 });
+    return NextResponse.json({ error: '更新に失敗しました。' }, { status: 500 });
   } finally {
     await prisma.$disconnect();
   }
 }
 
-// Partial updates (status/location/manager/owner transfer)
+// --- 部分更新 (PATCH) ---
 export async function PATCH(req: NextRequest) {
   try {
     const body = await req.json();
-    const { id, status, location, manager, ownerid } = body;
+    const { id, status, location, manager, ownerid, department, updatedBy } = body;
+
     if (!id) return NextResponse.json({ error: 'IDが必要です。' }, { status: 400 });
 
+    // 管理者(manager)を変更する場合のユーザー実在チェック
+    if (manager) {
+      const userExists = await prisma.accounts.findFirst({ where: { userid: manager } });
+      if (!userExists) {
+        return NextResponse.json({ error: `ユーザー「${manager}」は登録されていません。` }, { status: 400 });
+      }
+    }
+
     const data: any = {};
-    if (status) data.status = status;
+    if (status) data.status = status as AssetStatus;
     if (location !== undefined) data.location = location || null;
     if (manager !== undefined) data.manager = manager || null;
     if (ownerid !== undefined) data.ownerid = ownerid;
+    if (department) data.department = department as Department;
+    if (updatedBy) data.updatedBy = updatedBy;
 
     const updated = await prisma.items.update({
       where: { id: Number(id) },
@@ -160,14 +186,13 @@ export async function PATCH(req: NextRequest) {
 
     return NextResponse.json({ item: updated }, { status: 200 });
   } catch (error) {
-    console.error('Error patching item:', error);
-    return NextResponse.json({ error: '部分更新に失敗しました。' }, { status: 500 });
+    return NextResponse.json({ error: '更新に失敗しました。' }, { status: 500 });
   } finally {
     await prisma.$disconnect();
   }
 }
 
-// Delete (admin only - check via header or ignore for simplicity)
+// --- 削除 (DELETE) ---
 export async function DELETE(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
@@ -175,13 +200,9 @@ export async function DELETE(req: NextRequest) {
     if (!id) return NextResponse.json({ error: 'IDが必要です。' }, { status: 400 });
 
     await prisma.items.delete({ where: { id: Number(id) } });
-
     return NextResponse.json({ ok: true }, { status: 200 });
   } catch (error: any) {
-    if (error.code === 'P2025') {
-      return NextResponse.json({ error: '対象が見つかりません。' }, { status: 404 });
-    }
-    console.error('Error deleting item:', error);
+    if (error.code === 'P2025') return NextResponse.json({ error: '対象が見つかりません。' }, { status: 404 });
     return NextResponse.json({ error: '削除に失敗しました。' }, { status: 500 });
   } finally {
     await prisma.$disconnect();

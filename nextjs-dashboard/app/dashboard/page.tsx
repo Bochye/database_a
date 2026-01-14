@@ -3,16 +3,16 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import styles from './page.module.css';
+
 import EditItems, { ClientItem } from '../../components/edititems';
-import SearchBar from '../../components/searchbar';
-import InlineActions from '../../components/inlineactions';
+import SearchBar, { SearchFilters } from '../../components/searchbar';
 import TransferModal from '../../components/transfermodal';
 import RequestModal from '../../components/requestmodal';
-import Inventory from '../../components/inventory';
 import AdminRequests from '../../components/adminrequests';
+import UserRequests from '../../components/userrequests'; // ★ 追加
 import AdminUsers from '../../components/adminusers';
 import InventoryAdmin from '../../components/InventoryAdmin';
-import InventoryUser from '../../components/InventoryUser';
+import Inventory from '../../components/inventory';
 
 interface ItemRow {
   id: number;
@@ -27,147 +27,124 @@ interface ItemRow {
   status: string;
   ownerid: string;
   createdAt: string;
+  updatedAt?: string | null;
+  updatedBy?: string | null;
+  department?: string | null;
   stock?: number;
 }
 
 type TabKey = 'ITEMS' | 'INVENTORY' | 'REQUESTS' | 'USERS';
+type DisplayMode = 'SIMPLE' | 'DETAIL';
 
 export default function DashboardPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<ClientItem | null>(null);
-
+  const [selectedItem, setSelectedItem] = useState<ItemRow | null>(null);
   const [user, setUser] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
-
   const [items, setItems] = useState<ItemRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
   const [tab, setTab] = useState<TabKey>('ITEMS');
-
   const [transferTarget, setTransferTarget] = useState<ItemRow | null>(null);
   const [requestTarget, setRequestTarget] = useState<ItemRow | null>(null);
+  const [displayMode, setDisplayMode] = useState<DisplayMode>('SIMPLE');
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [searchKey, setSearchKey] = useState(0);
+  const [currentFilters, setCurrentFilters] = useState<SearchFilters>({});
 
   const router = useRouter();
 
-  const handleOpenModal = (itemToEdit: ItemRow | null) => {
-    if (itemToEdit) {
-      const client: ClientItem = {
-        id: itemToEdit.id,
-        code: itemToEdit.assetCode,
-        name: itemToEdit.name,
-        modelNumber: itemToEdit.modelNumber || undefined,
-        acquisitionAt: itemToEdit.acquisitionDate || null,
-        disposalAt: itemToEdit.disposalDate || null,
-        value: itemToEdit.acquisitionCost ?? null,
-        manager: itemToEdit.manager || undefined,
-        location: itemToEdit.location || undefined,
-        status: itemToEdit.status,
-        ownerId: itemToEdit.ownerid,
-        createdAt: itemToEdit.createdAt,
-        stock: itemToEdit.stock ?? 1,
-      };
-      setEditingItem(client);
-    } else {
-      setEditingItem(null);
-    }
-    setIsModalOpen(true);
-  };
-
-  const handleCloseModal = () => {
-    setEditingItem(null);
-    setIsModalOpen(false);
-  };
-
-  const handleSave = useCallback((savedItem: ClientItem) => {
-    setItems(prevItems => {
-      const idx = prevItems.findIndex(i => i.id === savedItem.id);
-      const mapped: ItemRow = {
-        id: savedItem.id,
-        assetCode: savedItem.code,
-        name: savedItem.name,
-        modelNumber: savedItem.modelNumber,
-        acquisitionDate: savedItem.acquisitionAt,
-        disposalDate: savedItem.disposalAt,
-        acquisitionCost: savedItem.value ?? null,
-        manager: savedItem.manager,
-        location: savedItem.location,
-        status: savedItem.status,
-        ownerid: savedItem.ownerId,
-        createdAt: savedItem.createdAt,
-        stock: savedItem.stock,
-      };
-      if (idx !== -1) {
-        const arr = [...prevItems];
-        arr[idx] = mapped;
-        return arr;
-      } else {
-        return [mapped, ...prevItems];
-      }
-    });
-  }, []);
-
-  useEffect(() => {
-    const loggedInUser = localStorage.getItem('loggedInUser');
-    const adminFlag = localStorage.getItem('isAdmin') === 'true';
-    if (!loggedInUser) {
-      router.push('/login');
-    } else {
-      setUser(loggedInUser);
-      setIsAdmin(adminFlag);
-    }
+  const performLogout = useCallback(() => {
+    localStorage.removeItem('loggedInUser');
+    localStorage.removeItem('isAdmin');
+    router.push('/login');
   }, [router]);
 
-  const fetchItems = async (q = '', status = '', onlyMine = false) => {
+  const fetchItems = useCallback(async (filters: SearchFilters = {}) => {
     setIsLoading(true);
     setError(null);
     try {
+      const loggedInUser = localStorage.getItem('loggedInUser');
+      const adminFlag = localStorage.getItem('isAdmin') === 'true';
+
       const params = new URLSearchParams();
-      if (q) params.set('q', q);
-      if (status) params.set('status', status);
-      if (onlyMine) {
-        params.set('onlyMine', 'true');
-        if (user) params.set('ownerId', user);
+      Object.entries(filters).forEach(([key, value]) => {
+        if (value !== undefined && value !== '') params.set(key, String(value));
+      });
+      
+      params.set('isAdmin', adminFlag ? 'true' : 'false');
+      if (loggedInUser) {
+        params.set('manager', loggedInUser);
       }
+
       const res = await fetch(`/api/items?${params.toString()}`);
+      if (res.status === 401 || res.status === 403) {
+        performLogout();
+        return;
+      }
+
       if (!res.ok) throw new Error('Failed to fetch items');
       const data = await res.json();
       setItems(data.items);
+      setCurrentFilters(filters);
     } catch (err) {
-      console.error(err);
       setError('資産データの取得に失敗しました。');
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [performLogout]);
 
   useEffect(() => {
-    if (user) fetchItems();
-  }, [user]);
+    const checkUserStatus = async () => {
+      const loggedInUser = localStorage.getItem('loggedInUser');
+      const adminFlag = localStorage.getItem('isAdmin') === 'true';
 
-  const handleLogout = () => {
-    localStorage.removeItem('loggedInUser');
-    localStorage.removeItem('isAdmin');
-    router.push('/login');
-  };
+      if (!loggedInUser) {
+        router.push('/login');
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/accounts?userid=${loggedInUser}`);
+        const data = await res.json();
+        const userExists = data.accounts?.some((u: any) => u.userid === loggedInUser);
+        
+        if (!res.ok || !userExists) {
+          alert('セッションが無効です。再度ログインしてください。');
+          performLogout();
+          return;
+        }
+
+        setUser(loggedInUser);
+        setIsAdmin(adminFlag);
+      } catch (err) {
+        console.error("ユーザー確認エラー:", err);
+      }
+    };
+    checkUserStatus();
+  }, [router, performLogout]);
+
+  useEffect(() => {
+    if (user) fetchItems({ onlyMine: !isAdmin });
+  }, [user, isAdmin, fetchItems]);
+
+  const handleReload = useCallback(() => fetchItems(currentFilters), [fetchItems, currentFilters]);
+
+  const handleSave = useCallback(() => {
+    handleReload();
+    setIsModalOpen(false);
+    setEditingItem(null);
+  }, [handleReload]);
 
   const formatDate = (dateString?: string | null) => {
     if (!dateString) return '-';
-    return new Date(dateString).toLocaleDateString('ja-JP', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    });
+    return new Date(dateString).toLocaleDateString('ja-JP');
   };
 
-  const deleteItem = async (id: number) => {
-    if (!confirm('この資産を削除しますか？')) return;
-    const res = await fetch(`/api/items?id=${id}`, { method: 'DELETE' });
-    if (res.ok) {
-      setItems(prev => prev.filter(i => i.id !== id));
-    } else {
-      alert('削除に失敗しました');
-    }
+  const formatDateTime = (dateString?: string | null) => {
+    if (!dateString) return '-';
+    return new Date(dateString).toLocaleString('ja-JP');
   };
 
   if (!user) return <p>ログイン状態を確認中...</p>;
@@ -178,126 +155,174 @@ export default function DashboardPage() {
         <h1 className={styles.header_title}>資産管理ダッシュボード</h1>
       </header>
 
-      <div className={styles.menues}>
-        <div className={styles.yourelogin}>
-          ログイン中<br />{user}
+      <button className={styles.menuToggleButton} onClick={() => setIsMenuOpen(!isMenuOpen)}>
+        {isMenuOpen ? '✕' : '☰'}
+      </button>
+      {isMenuOpen && <div className={styles.overlay} onClick={() => setIsMenuOpen(false)} />}
+
+      <div className={`${styles.menues} ${isMenuOpen ? styles.menuOpen : ''}`}>
+        {/* ログインユーザー情報エリアの改善 */}
+        <div className={styles.userInfoWrapper} style={{ 
+          marginTop: '40px', 
+          padding: '15px 10px', 
+          width: '90%', 
+          backgroundColor: 'rgba(255,255,255,0.1)', 
+          borderRadius: '4px',
+          textAlign: 'center' 
+        }}>
+          <div style={{ color: '#fff', fontSize: '12px', opacity: 0.8, marginBottom: '5px' }}>ログイン中</div>
+          <div style={{ 
+            color: '#fff', 
+            fontSize: '16px', 
+            fontWeight: 'bold', 
+            marginBottom: '10px',
+            wordBreak: 'break-all' 
+          }}>
+            {user}
+          </div>
+          
+          {/* 権限ラベルの表示 */}
+          <span className={styles.statusLabel} style={{ 
+            background: isAdmin ? '#ffebeb' : '#eef2f8', 
+            color: isAdmin ? '#d32f2f' : '#4a6fa5',
+            fontSize: '11px',
+            padding: '3px 10px',
+            fontWeight: 'bold',
+            borderRadius: '12px', // 少し丸みをつけてラベルらしく
+            display: 'inline-block'
+          }}>
+            {isAdmin ? '管理者' : '一般ユーザー'}
+          </span>
         </div>
-        <div className={styles.tabs}>
-          <button className={tab === 'ITEMS' ? styles.activeTab : styles.tab} onClick={() => setTab('ITEMS')}>資産</button>
-          <button className={tab === 'INVENTORY' ? styles.activeTab : styles.tab} onClick={() => setTab('INVENTORY')}>棚卸し</button>
-          <button className={tab === 'REQUESTS' ? styles.activeTab : styles.tab} onClick={() => setTab('REQUESTS')}>申請</button>
-          {isAdmin && <button className={tab === 'USERS' ? styles.activeTab : styles.tab} onClick={() => setTab('USERS')}>ユーザー</button>}
+
+        <div className={styles.tabs} style={{ marginTop: '20px', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <button className={tab === 'ITEMS' ? styles.activeTab : styles.tab} onClick={() => { setTab('ITEMS'); setIsMenuOpen(false); }}>資産</button>
+          <button className={tab === 'INVENTORY' ? styles.activeTab : styles.tab} onClick={() => { setTab('INVENTORY'); setIsMenuOpen(false); }}>棚卸し</button>
+          <button className={tab === 'REQUESTS' ? styles.activeTab : styles.tab} onClick={() => { setTab('REQUESTS'); setIsMenuOpen(false); }}>申請</button>
+          {isAdmin && (
+            <button className={tab === 'USERS' ? styles.activeTab : styles.tab} onClick={() => { setTab('USERS'); setIsMenuOpen(false); }}>ユーザー</button>
+          )}
         </div>
-        <button className={styles.logoutButton} onClick={handleLogout}>
-          ログアウト
-        </button>
+        <button className={styles.logoutButton} onClick={performLogout}>ログアウト</button>
       </div>
 
       <main>
         {tab === 'ITEMS' && (
           <>
-            <div className={styles.actionsRow}>
-              <button onClick={() => handleOpenModal(null)} className={styles.addButton}>新規資産を追加</button>
+            <SearchBar key={searchKey} isAdmin={isAdmin} onSearch={(filters) => fetchItems(filters)} />
+            <div className={styles.tableActions}>
+              <div /> 
+              <div className={styles.centerGroup}>
+                <div className={styles.modeSwitcher}>
+                  <button className={displayMode === 'SIMPLE' ? styles.modeActive : styles.modeBtn} onClick={() => setDisplayMode('SIMPLE')}>簡易表示</button>
+                  <button className={displayMode === 'DETAIL' ? styles.modeActive : styles.modeBtn} onClick={() => setDisplayMode('DETAIL')}>詳細表示</button>
+                </div>
+                <button className={styles.reloadButton} onClick={handleReload} disabled={isLoading}>↻ 更新</button>
+                <button className={styles.resetButton} onClick={() => { setSearchKey(k => k+1); fetchItems({onlyMine: !isAdmin}); }}>リセット</button>
+              </div>
+              <div className={styles.rightAction}>
+                {isAdmin && <button onClick={() => setIsModalOpen(true)} className={styles.addButton}>新規資産の追加</button>}
+              </div>
             </div>
 
-            <SearchBar onSearch={(q, s, mine) => fetchItems(q, s, mine)} />
-
-            {isLoading && <p>データを読み込み中...</p>}
-            {error && <p style={{ color: 'red' }}>{error}</p>}
-
-            {!isLoading && !error && (
-              <div className={styles.tableContainer}>
-                {items.length > 0 ? (
-                  <table className={styles.itemsTable}>
-                    <thead>
-                      <tr>
-                        <th>ID</th><th>資産コード</th><th>資産名</th><th>型式</th><th>取得年月日</th>
-                        <th>廃棄年月日</th><th>取得価額</th><th>管理者</th><th>管理場所</th><th>状態</th>
-                        <th>所有者ID</th><th>操作</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {items.map((item) => (
-                        <tr key={item.id}>
-                          <td>{item.id.toString().padStart(6, '0')}</td>
-                          <td>{item.assetCode || '-'}</td>
-                          <td>{item.name || '-'}</td>
-                          <td>{item.modelNumber || '-'}</td>
-                          <td>{item.acquisitionDate ? formatDate(item.acquisitionDate) : '-'}</td>
-                          <td>{item.disposalDate ? formatDate(item.disposalDate) : '-'}</td>
-                          <td>{item.acquisitionCost != null ? `${item.acquisitionCost.toLocaleString()}円` : '-'}</td>
-                          <td>{item.manager || '-'}</td>
-                          <td>{item.location || '-'}</td>
-                          <td>{item.status || '-'}</td>
-                          <td>{item.ownerid || '-'}</td>
-                          <td className={styles.actionCell}>
-                            <div className={styles.actionButtons}>
-                              <button onClick={() => handleOpenModal(item)} className={styles.editButton}>編集</button>
-                              <button onClick={() => setTransferTarget(item)} className={styles.secondaryButton}>引継ぎ</button>
-                              <button onClick={() => setRequestTarget(item)} className={styles.secondaryButton}>申請</button>
-                              {isAdmin && (
-                                <button onClick={() => deleteItem(item.id)} className={styles.deleteButton}>削除</button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                ) : (
-                  <p>登録されている資産はありません。</p>
-                )}
-              </div>
-            )}
+            <div className={styles.tableContainer}>
+              {isLoading && <div className={styles.tableInlineLoader}>読み込み中...</div>}
+              <table className={`${styles.itemsTable} ${isLoading ? styles.loadingEffect : ''}`}>
+                <thead>
+                  <tr>
+                    {displayMode === 'DETAIL' && (<><th>ID</th><th>資産コード</th></>)}
+                    <th>資産名</th><th>型式</th><th>取得年月日</th>
+                    <th>管理者</th><th>管理場所</th><th>状態</th><th>操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {items.map((item) => (
+                    <tr key={item.id} onClick={() => !isLoading && setSelectedItem(item)} className={styles.clickableRow}>
+                      {displayMode === 'DETAIL' && (<><td>{item.id.toString().padStart(6, '0')}</td><td>{item.assetCode || '-'}</td></>)}
+                      <td className={styles.nameCell}>{item.name}</td>
+                      <td>{item.modelNumber || '-'}</td>
+                      <td>{formatDate(item.acquisitionDate)}</td>
+                      <td>{item.manager || '-'}</td>
+                      <td>{item.location || '-'}</td>
+                      <td><span className={styles.statusLabel}>{item.status}</span></td>
+                      <td className={styles.actionCell} onClick={(e) => e.stopPropagation()}>
+                        <div className={styles.actionButtons}>
+                          {isAdmin ? (
+                            <>
+                              <button onClick={(e) => {
+                                e.stopPropagation();
+                                setEditingItem({
+                                  ...item, code: item.assetCode, acquisitionAt: item.acquisitionDate, disposalAt: item.disposalDate,
+                                  value: item.acquisitionCost, ownerId: item.ownerid, createdAt: item.createdAt
+                                } as any); 
+                                setIsModalOpen(true);
+                              }} className={styles.editButton}>編集</button>
+                              <button onClick={(e) => { e.stopPropagation(); setTransferTarget(item); }} className={styles.secondaryButton}>引継ぎ</button>
+                              <button onClick={(e) => {
+                                e.stopPropagation();
+                                if(confirm('削除しますか？')) fetch(`/api/items?id=${item.id}`, {method: 'DELETE'}).then(() => handleReload());
+                              }} className={styles.deleteButton}>削除</button>
+                            </>
+                          ) : (
+                            <button onClick={(e) => { e.stopPropagation(); setRequestTarget(item); }} className={styles.requestButton}>申請</button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </>
         )}
 
         {tab === 'INVENTORY' && (
-          isAdmin ? <InventoryAdmin /> : <InventoryUser ownerId={user!} />
+          <div className={styles.tabContent}>
+            {isAdmin ? <InventoryAdmin /> : <Inventory ownerId={user!} />}
+          </div>
         )}
 
+        {/* ★ 申請タブの出し分けロジック ★ */}
         {tab === 'REQUESTS' && (
-          <>
-            {!isAdmin ? (
-              <p>「資産」タブから対象資産の「申請」ボタンで申請を作成できます。</p>
-            ) : (
-              <AdminRequests />
-            )}
-          </>
+          <div className={styles.tabContent}>
+            {isAdmin ? <AdminRequests /> : <UserRequests user={user!} />}
+          </div>
         )}
 
         {tab === 'USERS' && isAdmin && (
-          <AdminUsers />
+          <div className={styles.tabContent}>
+            <AdminUsers onUserUpdate={handleReload} />
+          </div>
         )}
       </main>
 
-      {isModalOpen && (
-        <EditItems
-          onClose={handleCloseModal}
-          onSave={handleSave}
-          ownerId={user!}
-          initialItem={editingItem}
-        />
+      {/* 詳細表示モーダル (既存のまま) */}
+      {selectedItem && (
+        <div className={styles.modalOverlay} onClick={() => setSelectedItem(null)}>
+          <div className={styles.infoCard} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.infoCardHeader}>
+              <h3>備品詳細情報</h3>
+              <button className={styles.closeX} onClick={() => setSelectedItem(null)}>×</button>
+            </div>
+            <div className={styles.infoCardContent}>
+              <div className={styles.infoRow}><label>ID</label><span>{selectedItem.id.toString().padStart(6, '0')}</span></div>
+              <div className={styles.infoRow}><label>資産コード</label><span>{selectedItem.assetCode || '-'}</span></div>
+              <div className={styles.infoRow}><label>資産名</label><span>{selectedItem.name}</span></div>
+              <div className={styles.infoRow}><label>取得価額</label><span>{selectedItem.acquisitionCost?.toLocaleString()}円</span></div>
+              <div className={styles.infoRow}><label>管理者</label><span>{selectedItem.ownerid || '-'}</span></div>
+              <div className={styles.infoRow}><label>最終更新日時</label><span>{formatDateTime(selectedItem.updatedAt)}</span></div>
+            </div>
+            <div className={styles.infoCardFooter}>
+              <button className={styles.closeBtn} onClick={() => setSelectedItem(null)}>閉じる</button>
+            </div>
+          </div>
+        </div>
       )}
 
-      {transferTarget && (
-        <TransferModal
-          itemId={transferTarget.id}
-          currentManager={transferTarget.manager}
-          currentOwnerId={transferTarget.ownerid}
-          onClose={() => setTransferTarget(null)}
-          onUpdated={() => fetchItems()}
-        />
-      )}
-
-      {requestTarget && (
-        <RequestModal
-          itemId={requestTarget.id}
-          requesterId={user!}
-          onClose={() => setRequestTarget(null)}
-          onSubmitted={() => {}}
-        />
-      )}
+      {/* 各種モーダル */}
+      {isModalOpen && <EditItems onClose={() => { setIsModalOpen(false); setEditingItem(null); }} onSave={handleSave} ownerId={user!} initialItem={editingItem} />}
+      {transferTarget && <TransferModal itemId={transferTarget.id} currentManager={transferTarget.manager} onClose={() => setTransferTarget(null)} onUpdated={handleReload} />}
+      {requestTarget && <RequestModal itemId={requestTarget.id} requesterId={user!} onClose={() => setRequestTarget(null)} onSubmitted={() => {}} />}
     </div>
   );
 }
