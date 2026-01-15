@@ -1,6 +1,0 @@
-{
-  "/api/inventoryrequests/route": "app/api/inventoryrequests/route.js",
-  "/api/inventoryrounds/route": "app/api/inventoryrounds/route.js",
-  "/dashboard/page": "app/dashboard/page.js",
-  "/login/page": "app/login/page.js"
-}
