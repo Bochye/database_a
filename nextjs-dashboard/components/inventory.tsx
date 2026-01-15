@@ -47,7 +47,7 @@ const loadItems = async () => {
   setLoading(true);
   try {
     // 1. 資産一覧
-    const resItems = await fetch(`/api/items?isAdmin=false&manager=${ownerId}`);
+    const resItems = await fetch(`/api/items?isAdmin=false&ownerId=${ownerId}`);
     const dataItems = await resItems.json();
     setItems((dataItems.items || []).filter((i: any) => i.status !== 'DISPOSED'));
 
@@ -74,14 +74,20 @@ const loadItems = async () => {
   }, [ownerId]);
 
   const handleRowClick = (item: InventoryItem) => {
-    const isCompleted = (item.InventoryRecords && item.InventoryRecords.length > 0) || completedIds.has(item.id);
-    if (isCompleted) return;
+    // 棚卸しが停止中なら入力不可
+    if (!roundTitle || roundTitle === '-') return;
+
+    const record = item.InventoryRecords?.[0] as any;
+    const recordStatus = record?.status;
+    // 再申請依頼中以外のレコードがあれば入力不可
+    const isSubmitted = record && recordStatus !== 'RESUBMIT_REQUESTED';
+    if (isSubmitted || completedIds.has(item.id)) return;
 
     setSelectedItem(item);
     setNewLocation(item.location || '');
     setNewStatus(item.status);
-    setNewStock(item.stock || 1); 
-    setShowFullDetail(false); 
+    setNewStock(item.stock || 1);
+    setShowFullDetail(false);
   };
 
   const handleSubmit = async () => {
@@ -186,15 +192,21 @@ const loadItems = async () => {
             </thead>
             <tbody>
               {items.map((item) => {
-                const isAlreadySubmitted = item.InventoryRecords && item.InventoryRecords.length > 0;
-                const isCompleted = isAlreadySubmitted || completedIds.has(item.id);
+                const record = item.InventoryRecords?.[0];
+                const recordStatus = record?.status;
+                // 再申請依頼中なら入力可能、それ以外のレコードがあれば入力不可
+                const needsResubmit = recordStatus === 'RESUBMIT_REQUESTED';
+                const isSubmitted = record && recordStatus !== 'RESUBMIT_REQUESTED';
+                const justCompleted = completedIds.has(item.id);
+                const isStopped = !roundTitle || roundTitle === '-';
+                const isClickable = !isStopped && !isSubmitted && !justCompleted;
 
                 return (
                   <tr
                     key={item.id}
-                    className={`${styles.clickableRow} ${isCompleted ? styles.completedRow : ''}`}
-                    onClick={() => handleRowClick(item)}
-                    style={isCompleted ? { opacity: 0.5, backgroundColor: '#f5f5f5', cursor: 'default' } : {}}
+                    className={isClickable ? styles.clickableRow : ''}
+                    onClick={() => isClickable && handleRowClick(item)}
+                    style={!isClickable ? { opacity: 0.5, backgroundColor: '#f5f5f5', cursor: 'default' } : {}}
                   >
                     <td className={styles.nameCell} style={{ textAlign: 'left' }}>
                       <div style={{ fontSize: '11px', color: '#666' }}>{item.assetCode}</div>
@@ -206,10 +218,16 @@ const loadItems = async () => {
                     <td><span className={styles.statusLabel}>{getStatusLabel(item.status)}</span></td>
                     <td>{item.stock ?? 1}</td>
                     <td>
-                      {isCompleted ? (
-                        <span style={{ color: '#2e7d32', fontWeight: 'bold' }}>✓ 完了</span>
+                      {justCompleted ? (
+                        <span style={{ color: '#2e7d32', fontWeight: 'bold' }}>送信済</span>
+                      ) : recordStatus === 'APPROVED' ? (
+                        <span style={{ color: '#2e7d32', fontWeight: 'bold' }}>適用済</span>
+                      ) : recordStatus === 'PENDING' ? (
+                        <span style={{ color: '#2e7d32', fontWeight: 'bold' }}>送信済</span>
+                      ) : needsResubmit ? (
+                        <span style={{ color: '#e74c3c', fontWeight: 'bold' }}>再申請依頼</span>
                       ) : (
-                        <button className={styles.requestButton}>確認</button>
+                        <span style={{ color: '#f57c00', fontWeight: 'bold' }}>未送信</span>
                       )}
                     </td>
                   </tr>

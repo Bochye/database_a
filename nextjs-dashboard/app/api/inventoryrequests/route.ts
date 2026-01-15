@@ -93,18 +93,48 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: '現在アクティブな棚卸し期間がありません。' }, { status: 400 });
     }
 
-    // 報告レコードを作成
-    const record = await prisma.inventoryRecords.create({
-      data: {
-        ownerId: userId,
-        newLocation: newLocation,
-        newStatus: newStatus as AssetStatus,
-        newStock: newStock != null ? Number(newStock) : undefined,
-        isApproved: false, // 初期値は未承認
-        item: { connect: { id: Number(itemId) } },
-        round: { connect: { id: currentRound.id } }
-      } as any, 
+    // 既存のレコードを確認（再申請依頼中の場合は更新）
+    const existingRecord = await prisma.inventoryRecords.findUnique({
+      where: {
+        itemId_roundId: {
+          itemId: Number(itemId),
+          roundId: currentRound.id
+        }
+      }
     });
+
+    let record;
+    if (existingRecord && (existingRecord as any).status === 'RESUBMIT_REQUESTED') {
+      // 再申請依頼中のレコードを更新
+      record = await prisma.inventoryRecords.update({
+        where: { id: existingRecord.id },
+        data: {
+          ownerId: userId,
+          newLocation: newLocation,
+          newStatus: newStatus as AssetStatus,
+          newStock: newStock != null ? Number(newStock) : undefined,
+          status: 'PENDING',
+          isApproved: false,
+          confirmedAt: new Date()
+        } as any
+      });
+    } else if (!existingRecord) {
+      // 新規レコードを作成
+      record = await prisma.inventoryRecords.create({
+        data: {
+          ownerId: userId,
+          newLocation: newLocation,
+          newStatus: newStatus as AssetStatus,
+          newStock: newStock != null ? Number(newStock) : undefined,
+          isApproved: false,
+          status: 'PENDING',
+          item: { connect: { id: Number(itemId) } },
+          round: { connect: { id: currentRound.id } }
+        } as any,
+      });
+    } else {
+      return NextResponse.json({ error: '既に報告済みです。' }, { status: 400 });
+    }
 
     return NextResponse.json({ record }, { status: 201 });
   } catch (e) {
@@ -114,18 +144,73 @@ export async function POST(req: NextRequest) {
 }
 
 /**
- * 【PATCH】管理者が報告内容を資産台帳（Items）に一括適用する
+ * 【PATCH】管理者が報告内容を資産台帳（Items）に適用する / 再申請を依頼する
  */
 export async function PATCH(req: NextRequest) {
   try {
-    const { userId, action } = await req.json();
+    const { userId, recordId, action } = await req.json();
 
+    // 個別適用
+    if (action === 'APPROVE_SINGLE' && recordId) {
+      const record = await prisma.inventoryRecords.findUnique({
+        where: { id: Number(recordId) }
+      });
+
+      if (!record) {
+        return NextResponse.json({ error: 'レコードが見つかりません。' }, { status: 404 });
+      }
+
+      await prisma.$transaction(async (tx) => {
+        await tx.items.update({
+          where: { id: (record as any).itemId },
+          data: {
+            location: record.newLocation,
+            status: record.newStatus as AssetStatus,
+            stock: (record as any).newStock ?? undefined,
+            updatedBy: 'SYSTEM_ADMIN'
+          }
+        });
+
+        await tx.inventoryRecords.update({
+          where: { id: Number(recordId) },
+          data: {
+            isApproved: true,
+            status: 'APPROVED'
+          } as any
+        });
+      });
+
+      return NextResponse.json({ success: true });
+    }
+
+    // 再申請依頼
+    if (action === 'REQUEST_RESUBMIT' && recordId) {
+      const record = await prisma.inventoryRecords.findUnique({
+        where: { id: Number(recordId) }
+      });
+
+      if (!record) {
+        return NextResponse.json({ error: 'レコードが見つかりません。' }, { status: 404 });
+      }
+
+      await prisma.inventoryRecords.update({
+        where: { id: Number(recordId) },
+        data: {
+          status: 'RESUBMIT_REQUESTED',
+          isApproved: false
+        } as any
+      });
+
+      return NextResponse.json({ success: true });
+    }
+
+    // 一括適用
     if (action === 'APPROVE_ALL') {
       const pendingRecords = await prisma.inventoryRecords.findMany({
-        where: { 
-          ownerId: userId, 
-          isApproved: false,
-          round: { isCurrent: true } 
+        where: {
+          ownerId: userId,
+          status: 'PENDING',
+          round: { isCurrent: true }
         }
       });
 
@@ -149,12 +234,15 @@ export async function PATCH(req: NextRequest) {
 
         // 報告レコードを「承認済み」に変更
         await tx.inventoryRecords.updateMany({
-          where: { 
-            ownerId: userId, 
+          where: {
+            ownerId: userId,
             round: { isCurrent: true },
-            isApproved: false 
+            status: 'PENDING'
           },
-          data: { isApproved: true } as any
+          data: {
+            isApproved: true,
+            status: 'APPROVED'
+          } as any
         });
       });
 
@@ -163,6 +251,6 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: '無効なアクションです。' }, { status: 400 });
   } catch (e) {
     console.error('Inventory PATCH error:', e);
-    return NextResponse.json({ error: '資産台帳への適用に失敗しました。' }, { status: 500 });
+    return NextResponse.json({ error: '処理に失敗しました。' }, { status: 500 });
   }
 }

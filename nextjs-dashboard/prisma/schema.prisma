@@ -72,7 +72,8 @@ model InventoryRecords {
   ownerId     String
   roundId     Int      //どの棚卸し期間に対する回答か
   isApproved  Boolean         @default(false)
-　newStock    Int?
+  status      InventoryRecordStatus @default(PENDING) // 新規追加
+  newStock    Int?
   newLocation String?  // 回答時の場所
   newStatus   AssetStatus? // 回答時のステータス
   confirmedAt DateTime @default(now())
@@ -83,6 +84,12 @@ model InventoryRecords {
 
   // 同じ「期間」に「同じ資産」を2度回答できないように制約
   @@unique([itemId, roundId])
+}
+
+enum InventoryRecordStatus {
+  PENDING            // 送信済み・未処理
+  APPROVED           // 適用済み
+  RESUBMIT_REQUESTED // 再申請依頼済
 }
 model Requests {
   id           Int           @id @default(autoincrement())

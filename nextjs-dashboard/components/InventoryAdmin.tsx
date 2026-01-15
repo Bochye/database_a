@@ -8,7 +8,7 @@ export default function InventoryAdmin() {
   const [userStats, setUserStats] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
   const [selectedUser, setSelectedUser] = useState<string | null>(null);
-  const [selectedItem, setSelectedItem] = useState<any | null>(null);
+  const [selectedRecord, setSelectedRecord] = useState<any | null>(null);
   const [newRoundTitle, setNewRoundTitle] = useState('');
   const [currentRound, setCurrentRound] = useState<{ id: number; title: string } | null>(null);
 
@@ -97,6 +97,50 @@ export default function InventoryAdmin() {
       body: JSON.stringify({ userId, action: 'APPROVE_ALL' })
     });
     if (res.ok) { alert('資産台帳への適用が完了しました'); load(); }
+  };
+
+  // 個別の棚卸しレコードを適用
+  const applySingleRecord = async (record: any) => {
+    if (!window.confirm(`この資産「${record.item.name}」の報告内容を資産台帳に適用しますか？`)) return;
+    try {
+      const res = await fetch('/api/inventoryrequests', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recordId: record.id, action: 'APPROVE_SINGLE' })
+      });
+      if (res.ok) {
+        alert('適用しました');
+        setSelectedRecord(null);
+        load();
+      } else {
+        const err = await res.json();
+        alert(err.error || '適用に失敗しました');
+      }
+    } catch (e) {
+      alert('エラーが発生しました');
+    }
+  };
+
+  // 再申請を依頼
+  const requestResubmit = async (record: any) => {
+    if (!window.confirm(`この資産「${record.item.name}」の再申請を依頼しますか？`)) return;
+    try {
+      const res = await fetch('/api/inventoryrequests', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recordId: record.id, action: 'REQUEST_RESUBMIT' })
+      });
+      if (res.ok) {
+        alert('再申請を依頼しました。');
+        setSelectedRecord(null);
+        load();
+      } else {
+        const err = await res.json();
+        alert(err.error || '処理に失敗しました');
+      }
+    } catch (e) {
+      alert('エラーが発生しました');
+    }
   };
 
   const translateStatus = (s: string) => {
@@ -247,23 +291,35 @@ export default function InventoryAdmin() {
                   const isStatusChanged = r.newStatus !== r.item.status;
                   const isStockChanged = r.newStock !== null && r.newStock !== r.item.stock;
                   const hasDifference = isLocationChanged || isStatusChanged || isStockChanged;
+                  const recordStatus = r.status; // PENDING, APPROVED, RESUBMIT_REQUESTED
+                  const isClickable = recordStatus === 'PENDING';
 
                   return (
-                    <tr key={r.id} className={styles.clickableRow} onClick={() => setSelectedItem(r.item)}>
+                    <tr
+                      key={r.id}
+                      className={isClickable ? styles.clickableRow : ''}
+                      onClick={() => isClickable && setSelectedRecord(r)}
+                      style={!isClickable ? { opacity: 0.5, backgroundColor: '#f5f5f5', cursor: 'default' } : {}}
+                    >
                       <td>{r.item.assetCode}</td>
                       <td className={styles.nameCell}>{r.item.name}</td>
-                      <td style={{ color: isLocationChanged ? '#e67e22' : 'inherit', fontWeight: isLocationChanged ? 'bold' : 'normal' }}>
+                      <td style={{ color: isLocationChanged && isClickable ? '#e67e22' : 'inherit', fontWeight: isLocationChanged && isClickable ? 'bold' : 'normal' }}>
                         {r.newLocation}
                       </td>
                       <td><span className={styles.statusLabel}>{translateStatus(r.newStatus)}</span></td>
-                      {/* ★ 個数の表示。変更があれば色を変える */}
-                      <td style={{ color: isStockChanged ? '#e67e22' : 'inherit', fontWeight: isStockChanged ? 'bold' : 'normal' }}>
+                      <td style={{ color: isStockChanged && isClickable ? '#e67e22' : 'inherit', fontWeight: isStockChanged && isClickable ? 'bold' : 'normal' }}>
                         {r.newStock ?? r.item.stock}
                       </td>
                       <td>
-                        {hasDifference ? (
+                        {recordStatus === 'APPROVED' ? (
+                          <span style={{ color: '#2e7d32', fontWeight: 'bold' }}>適用済</span>
+                        ) : recordStatus === 'RESUBMIT_REQUESTED' ? (
+                          <span style={{ color: '#e74c3c', fontWeight: 'bold' }}>再申請依頼中</span>
+                        ) : hasDifference ? (
                           <span style={{ color: '#e67e22' }}>● 変更あり</span>
-                        ) : 'ー'}
+                        ) : (
+                          <span style={{ color: '#666' }}>未適用</span>
+                        )}
                       </td>
                     </tr>
                   );
@@ -274,27 +330,59 @@ export default function InventoryAdmin() {
         )}
       </div>
 
-      {selectedItem && (
-        <div className={styles.modalOverlay} onClick={() => setSelectedItem(null)}>
+      {selectedRecord && (
+        <div className={styles.modalOverlay} onClick={() => setSelectedRecord(null)}>
           <div className={styles.infoCard} onClick={(e) => e.stopPropagation()}>
             <div className={styles.infoCardHeader}>
-              <h3>備品詳細情報</h3>
-              <button onClick={() => setSelectedItem(null)}>×</button>
+              <h3>棚卸し報告詳細</h3>
+              <button onClick={() => setSelectedRecord(null)}>×</button>
             </div>
             <div className={styles.infoCardContent}>
-              <div className={styles.infoRow}><label>ID</label><span>{selectedItem.id.toString().padStart(6, '0')}</span></div>
-              <div className={styles.infoRow}><label>資産コード</label><span>{selectedItem.assetCode || '-'}</span></div>
-              <div className={styles.infoRow}><label>資産名</label><span>{selectedItem.name}</span></div>
-              <div className={styles.infoRow}><label>型式</label><span>{selectedItem.modelNumber || '-'}</span></div>
-              <div className={styles.infoRow}><label>取得価額</label><span>{selectedItem.acquisitionCost?.toLocaleString()}円</span></div>
-              <div className={styles.infoRow}><label>現在の台帳個数</label><span>{selectedItem.stock ?? 1}</span></div> {/* ★ 個数を追加 */}
-              <div className={styles.infoRow}><label>現在の場所</label><span>{selectedItem.location || '-'}</span></div>
-              <div className={styles.infoRow}><label>現在の状態</label><span>{translateStatus(selectedItem.status)}</span></div>
-              <div className={styles.infoRow}><label>管理者</label><span>{selectedItem.manager || '-'}</span></div>
-              <div className={styles.infoRow}><label>最終更新日時</label><span>{formatDateTime(selectedItem.updatedAt)}</span></div>
+              <div style={{ marginBottom: '15px', padding: '10px', background: '#f0f4f8', borderRadius: '4px' }}>
+                <div style={{ fontSize: '12px', color: '#666', marginBottom: '5px' }}>資産情報</div>
+                <div className={styles.infoRow}><label>資産コード</label><span>{selectedRecord.item.assetCode || '-'}</span></div>
+                <div className={styles.infoRow}><label>資産名</label><span>{selectedRecord.item.name}</span></div>
+                <div className={styles.infoRow}><label>型式</label><span>{selectedRecord.item.modelNumber || '-'}</span></div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                <div style={{ padding: '10px', background: '#fff3e0', borderRadius: '4px' }}>
+                  <div style={{ fontSize: '12px', color: '#e65100', marginBottom: '10px', fontWeight: 'bold' }}>現在の台帳</div>
+                  <div className={styles.infoRow}><label>場所</label><span>{selectedRecord.item.location || '-'}</span></div>
+                  <div className={styles.infoRow}><label>状態</label><span>{translateStatus(selectedRecord.item.status)}</span></div>
+                  <div className={styles.infoRow}><label>個数</label><span>{selectedRecord.item.stock ?? 1}</span></div>
+                </div>
+                <div style={{ padding: '10px', background: '#e8f5e9', borderRadius: '4px' }}>
+                  <div style={{ fontSize: '12px', color: '#2e7d32', marginBottom: '10px', fontWeight: 'bold' }}>報告内容</div>
+                  <div className={styles.infoRow}><label>場所</label><span style={{ color: selectedRecord.newLocation !== selectedRecord.item.location ? '#e65100' : 'inherit', fontWeight: selectedRecord.newLocation !== selectedRecord.item.location ? 'bold' : 'normal' }}>{selectedRecord.newLocation || '-'}</span></div>
+                  <div className={styles.infoRow}><label>状態</label><span style={{ color: selectedRecord.newStatus !== selectedRecord.item.status ? '#e65100' : 'inherit', fontWeight: selectedRecord.newStatus !== selectedRecord.item.status ? 'bold' : 'normal' }}>{translateStatus(selectedRecord.newStatus)}</span></div>
+                  <div className={styles.infoRow}><label>個数</label><span style={{ color: selectedRecord.newStock !== selectedRecord.item.stock ? '#e65100' : 'inherit', fontWeight: selectedRecord.newStock !== selectedRecord.item.stock ? 'bold' : 'normal' }}>{selectedRecord.newStock ?? selectedRecord.item.stock ?? 1}</span></div>
+                </div>
+              </div>
+
+              <div style={{ marginTop: '15px', fontSize: '12px', color: '#666' }}>
+                報告日時: {formatDateTime(selectedRecord.confirmedAt)}
+              </div>
             </div>
-            <div className={styles.infoCardFooter}>
-              <button className={styles.closeBtn} onClick={() => setSelectedItem(null)}>閉じる</button>
+            <div className={styles.infoCardFooter} style={{ display: 'flex', justifyContent: 'space-between', gap: '10px' }}>
+              <button
+                className={styles.deleteButton}
+                onClick={() => requestResubmit(selectedRecord)}
+              >
+                再申請を依頼
+              </button>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button className={styles.closeBtn} onClick={() => setSelectedRecord(null)}>閉じる</button>
+                {!selectedRecord.isApproved && (
+                  <button
+                    className={styles.addButton}
+                    style={{ backgroundColor: '#27ae60' }}
+                    onClick={() => applySingleRecord(selectedRecord)}
+                  >
+                    適用する
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>

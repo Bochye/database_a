@@ -36,11 +36,14 @@ export async function GET(req: NextRequest) {
 
     // 2. セキュリティ/閲覧制限ロジック
     if (!isAdmin) {
-      // 一般ユーザーの場合：自分が manager である資産のみに強制制限
+      // 一般ユーザーの場合：自分が manager または ownerid である資産に制限
       if (!currentUserName) {
         return NextResponse.json({ items: [] }, { status: 200 });
       }
-      where.manager = currentUserName;
+      where.OR = [
+        { manager: currentUserName },
+        { ownerid: currentUserName }
+      ];
     } else {
       // 管理者の場合
       if (onlyMine && currentUserName) {
@@ -59,11 +62,12 @@ const items = await prisma.items.findMany({
   include: {
     InventoryRecords: {
       where: {
-        round: { isCurrent: true } 
+        round: { isCurrent: true }
       },
       select: {
         id: true,
-        isApproved: true // 承認フラグを含めることでUI側で判定可能にする
+        isApproved: true,
+        status: true // ステータス（PENDING, APPROVED, RESUBMIT_REQUESTED）
       }
     }
   },

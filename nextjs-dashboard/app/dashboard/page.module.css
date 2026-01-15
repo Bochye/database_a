@@ -149,11 +149,12 @@
 
 .tab, .activeTab {
   padding: 8px 15px;
-  width: 80%;
+  width: 90%;
   border: none;
   border-radius: 1px;
   cursor: pointer;
   margin: 2px 0;
+  white-space: nowrap;
 }
 .tab { background: #6088c4; color: white; }
 .activeTab { background: white; color: #4a6fa5; font-weight: bold; }

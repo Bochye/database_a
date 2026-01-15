@@ -198,7 +198,7 @@ export default function DashboardPage() {
         <div className={styles.tabs} style={{ marginTop: '20px', width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           <button className={tab === 'ITEMS' ? styles.activeTab : styles.tab} onClick={() => { setTab('ITEMS'); setIsMenuOpen(false); }}>資産</button>
           <button className={tab === 'INVENTORY' ? styles.activeTab : styles.tab} onClick={() => { setTab('INVENTORY'); setIsMenuOpen(false); }}>棚卸し</button>
-          <button className={tab === 'REQUESTS' ? styles.activeTab : styles.tab} onClick={() => { setTab('REQUESTS'); setIsMenuOpen(false); }}>申請</button>
+          <button className={tab === 'REQUESTS' ? styles.activeTab : styles.tab} onClick={() => { setTab('REQUESTS'); setIsMenuOpen(false); }}>{isAdmin ? '申請' : '申請履歴'}</button>
           {isAdmin && (
             <button className={tab === 'USERS' ? styles.activeTab : styles.tab} onClick={() => { setTab('USERS'); setIsMenuOpen(false); }}>ユーザー</button>
           )}
