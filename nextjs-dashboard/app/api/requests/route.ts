@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient, RequestStatus, RequestType } from '@prisma/client';
+import { userExists, unauthorizedResponse } from '../utils/validateUser';
 
 const prisma = new PrismaClient();
 
@@ -52,6 +53,20 @@ export async function POST(req: NextRequest) {
     // バリデーション
     if (!itemId || !requesterId || !type) {
       return NextResponse.json({ error: '必須項目が不足しています。' }, { status: 400 });
+    }
+
+    // ユーザーの存在確認
+    if (!await userExists(requesterId)) {
+      return unauthorizedResponse();
+    }
+
+    // 資産の状態確認（除却済みは申請不可）
+    const item = await prisma.items.findUnique({ where: { id: Number(itemId) } });
+    if (!item) {
+      return NextResponse.json({ error: '資産が見つかりません。' }, { status: 404 });
+    }
+    if (item.status === 'DISPOSED') {
+      return NextResponse.json({ error: '除却済みの資産には申請できません。' }, { status: 400 });
     }
 
     const created = await prisma.requests.create({

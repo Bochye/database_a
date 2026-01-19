@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PrismaClient, AssetStatus } from '@prisma/client';
+import { userExists, unauthorizedResponse } from '../utils/validateUser';
 
 const prisma = new PrismaClient();
 
@@ -23,26 +24,36 @@ export async function GET() {
       });
     }
 
-    // 2. 除却済み以外の全資産を取得 (進捗の分母用)
-    const allActiveItems = await prisma.items.findMany({
-      where: { status: { not: 'DISPOSED' } }
-    });
-
-    // 3. 今回のラウンドの全回答を取得
+    // 2. 今回のラウンドの全回答を取得
     const currentRecords = await prisma.inventoryRecords.findMany({
       where: { roundId: currentRound.id },
-      include: { 
+      include: {
         item: true,
         round: true // フロントエンドでタイトルを引くため
       },
       orderBy: { confirmedAt: 'desc' }
     });
 
+    // 3. 今回の棚卸しで報告された資産IDのセット
+    const reportedItemIds = new Set(currentRecords.map(r => (r as any).itemId));
+
+    // 4. 分母用の資産を取得
+    // - 除却済み以外の資産 OR
+    // - 今回の棚卸しで報告された資産（除却報告含む）
+    const allTargetItems = await prisma.items.findMany({
+      where: {
+        OR: [
+          { status: { not: 'DISPOSED' } },
+          { id: { in: Array.from(reportedItemIds) as number[] } }
+        ]
+      }
+    });
+
     const userStats: Record<string, any> = {};
 
-    // 4. 統計の集計ロジック
+    // 5. 統計の集計ロジック
     // 全資産から「本来報告すべき件数」をユーザーごとにセット
-    allActiveItems.forEach(item => {
+    allTargetItems.forEach(item => {
       const u = item.manager || '未割り当て';
       if (!userStats[u]) {
         userStats[u] = { total: 0, reported: 0, applied: 0, records: [] };
@@ -83,6 +94,11 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { itemId, userId, newStatus, newLocation, newStock } = body;
+
+    // ユーザーの存在確認
+    if (!await userExists(userId)) {
+      return unauthorizedResponse();
+    }
 
     const currentRound = await prisma.inventoryRounds.findFirst({
       where: { isCurrent: true },

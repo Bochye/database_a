@@ -58,21 +58,21 @@ export default function TransferModal({ itemId, currentManager, onClose, onUpdat
 
           <div className={styles.formGrid}>
             <label className={styles.formLabel}>
-              <span className={styles.labelText}>現在の管理者</span>
-              <input 
-                className={styles.inputField} 
-                value={currentManager || '未設定'} 
-                disabled 
+              <span className={styles.labelText}>現在の使用者</span>
+              <input
+                className={styles.inputField}
+                value={currentManager || '未設定'}
+                disabled
                 style={{ backgroundColor: '#f5f5f5', color: '#666' }}
               />
             </label>
 
             <label className={styles.formLabel}>
-              <span className={styles.labelText}>新しい管理者のユーザー名 <span className={styles.requiredStar}>*</span></span>
-              <input 
-                className={styles.inputField} 
-                value={manager} 
-                onChange={e => setManager(e.target.value)} 
+              <span className={styles.labelText}>新しい使用者のユーザー名 <span className={styles.requiredStar}>*</span></span>
+              <input
+                className={styles.inputField}
+                value={manager}
+                onChange={e => setManager(e.target.value)}
                 placeholder="登録済みのIDを入力"
                 required
                 disabled={isLoading}

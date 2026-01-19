@@ -10,6 +10,14 @@ interface Account {
   department?: string;
 }
 
+interface LinkedItem {
+  id: number;
+  assetCode: string;
+  name: string;
+  location: string | null;
+  status: string;
+}
+
 interface EditUsersProps {
   user?: Account; // 編集時は必須、新規追加時は省略
   onClose: () => void;
@@ -28,6 +36,12 @@ export default function EditUsers({ user, onClose, onSave }: EditUsersProps) {
   const [department, setDepartment] = useState('CS');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // 引継ぎモーダル用ステート
+  const [showTransferModal, setShowTransferModal] = useState(false);
+  const [linkedItems, setLinkedItems] = useState<LinkedItem[]>([]);
+  const [allAccounts, setAllAccounts] = useState<Account[]>([]);
+  const [transferTo, setTransferTo] = useState('');
 
   // 初期値のセット
   useEffect(() => {
@@ -97,28 +111,82 @@ export default function EditUsers({ user, onClose, onSave }: EditUsersProps) {
     }
   };
 
+  // アカウント一覧を取得（引継ぎ先選択用）
+  const loadAccounts = async () => {
+    try {
+      const res = await fetch('/api/accounts');
+      const data = await res.json();
+      setAllAccounts(data.accounts || []);
+    } catch (error) {
+      console.error('Failed to load accounts');
+    }
+  };
+
   const handleDelete = async () => {
     if (!isEditMode || !user) return;
 
     const loggedInUser = localStorage.getItem('loggedInUser');
     const isSelf = user.userid === loggedInUser;
 
-    const confirmMessage = isSelf 
+    const confirmMessage = isSelf
       ? "【警告】あなた自身のアカウントを削除しますか？削除すると即座にログアウトされます。"
       : `ユーザー「${user.userid}」を削除しますか？`;
 
     if (!window.confirm(confirmMessage)) return;
-    
+
     setIsLoading(true);
     try {
       const res = await fetch(`/api/accounts?id=${user.id}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('削除に失敗しました');
+      const data = await res.json();
+
+      // 紐づき備品がある場合は引継ぎモーダルを表示
+      if (res.status === 409 && data.error === 'HAS_LINKED_ITEMS') {
+        setLinkedItems(data.linkedItems || []);
+        await loadAccounts();
+        setShowTransferModal(true);
+        setIsLoading(false);
+        return;
+      }
+
+      if (!res.ok) throw new Error(data.error || '削除に失敗しました');
 
       if (isSelf) {
         performLogout();
         return;
       }
 
+      onSave();
+      onClose();
+    } catch (err: any) {
+      setError(err.message);
+      setIsLoading(false);
+    }
+  };
+
+  // 引継ぎして削除を実行
+  const handleTransferAndDelete = async () => {
+    if (!user || !transferTo) return;
+
+    const loggedInUser = localStorage.getItem('loggedInUser');
+    const isSelf = user.userid === loggedInUser;
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const res = await fetch(`/api/accounts?id=${user.id}&transferTo=${encodeURIComponent(transferTo)}`, {
+        method: 'DELETE'
+      });
+      const data = await res.json();
+
+      if (!res.ok) throw new Error(data.error || '削除に失敗しました');
+
+      if (isSelf) {
+        performLogout();
+        return;
+      }
+
+      setShowTransferModal(false);
       onSave();
       onClose();
     } catch (err: any) {
@@ -185,32 +253,32 @@ export default function EditUsers({ user, onClose, onSave }: EditUsersProps) {
 
           <div className={styles.buttonContainer}>
             {isEditMode && (
-              <button 
-                type="button" 
-                onClick={handleDelete} 
-                className={`${styles.button} ${styles.cancelButton}`} 
-                style={{ 
-                  marginRight: 'auto', 
-                  backgroundColor: '#ffebeb', 
-                  color: '#d32f2f', 
-                  border: '1px solid #d32f2f' 
+              <button
+                type="button"
+                onClick={handleDelete}
+                className={`${styles.button} ${styles.cancelButton}`}
+                style={{
+                  marginRight: 'auto',
+                  backgroundColor: '#ffebeb',
+                  color: '#d32f2f',
+                  border: '1px solid #d32f2f'
                 }}
                 disabled={isLoading}
               >
                 削除
               </button>
             )}
-            <button 
-              type="button" 
-              onClick={onClose} 
-              className={`${styles.button} ${styles.cancelButton}`} 
+            <button
+              type="button"
+              onClick={onClose}
+              className={`${styles.button} ${styles.cancelButton}`}
               disabled={isLoading}
             >
               キャンセル
             </button>
-            <button 
-              type="submit" 
-              className={`${styles.button} ${styles.saveButton}`} 
+            <button
+              type="submit"
+              className={`${styles.button} ${styles.saveButton}`}
               disabled={isLoading}
             >
               {isLoading ? '保存中...' : (isEditMode ? '更新' : '作成')}
@@ -218,6 +286,102 @@ export default function EditUsers({ user, onClose, onSave }: EditUsersProps) {
           </div>
         </form>
       </div>
+
+      {/* 引継ぎモーダル */}
+      {showTransferModal && (
+        <div className={styles.modalOverlay} style={{ zIndex: 1001 }}>
+          <div className={styles.modalContainer} style={{ maxWidth: '500px' }}>
+            <div className={styles.modalHeader}>
+              <h2 className={styles.modalTitle}>備品の引継ぎが必要です</h2>
+              <button
+                onClick={() => setShowTransferModal(false)}
+                className={styles.closeButton}
+                aria-label="閉じる"
+                disabled={isLoading}
+              >
+                X
+              </button>
+            </div>
+
+            <div className={styles.formBody}>
+              {error && <div className={styles.errorMessage}>{error}</div>}
+
+              <p style={{ marginBottom: '15px', color: '#666' }}>
+                このアカウントには <strong>{linkedItems.length}件</strong> の備品が紐づいています。
+                削除する前に引継ぎ先を選択してください。
+              </p>
+
+              {/* 紐づき備品一覧 */}
+              <div style={{
+                maxHeight: '200px',
+                overflowY: 'auto',
+                border: '1px solid #ddd',
+                borderRadius: '4px',
+                marginBottom: '15px'
+              }}>
+                <table style={{ width: '100%', fontSize: '13px', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ background: '#f5f5f5' }}>
+                      <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #ddd' }}>資産番号</th>
+                      <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #ddd' }}>名称</th>
+                      <th style={{ padding: '8px', textAlign: 'left', borderBottom: '1px solid #ddd' }}>場所</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {linkedItems.map((item) => (
+                      <tr key={item.id}>
+                        <td style={{ padding: '8px', borderBottom: '1px solid #eee' }}>{item.assetCode}</td>
+                        <td style={{ padding: '8px', borderBottom: '1px solid #eee' }}>{item.name}</td>
+                        <td style={{ padding: '8px', borderBottom: '1px solid #eee' }}>{item.location || '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* 引継ぎ先選択 */}
+              <div className={styles.formLabel}>
+                <span className={styles.labelText}>引継ぎ先アカウント <span className={styles.requiredStar}>*</span></span>
+                <select
+                  value={transferTo}
+                  onChange={(e) => setTransferTo(e.target.value)}
+                  className={`${styles.inputField} ${styles.selectField}`}
+                  style={{ width: '100%' }}
+                >
+                  <option value="">-- 選択してください --</option>
+                  {allAccounts
+                    .filter(acc => acc.userid !== user?.userid)
+                    .map(acc => (
+                      <option key={acc.id} value={acc.userid}>
+                        {acc.userid} ({acc.department || '-'})
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              <div className={styles.buttonContainer} style={{ marginTop: '20px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowTransferModal(false)}
+                  className={`${styles.button} ${styles.cancelButton}`}
+                  disabled={isLoading}
+                >
+                  キャンセル
+                </button>
+                <button
+                  type="button"
+                  onClick={handleTransferAndDelete}
+                  className={`${styles.button} ${styles.saveButton}`}
+                  style={{ backgroundColor: '#d32f2f' }}
+                  disabled={isLoading || !transferTo}
+                >
+                  {isLoading ? '処理中...' : '引継ぎして削除'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

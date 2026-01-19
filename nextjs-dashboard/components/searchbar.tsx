@@ -54,7 +54,7 @@ export default function SearchBar({ onSearch, isAdmin }: Props) {
         <input name="assetCode" className={styles.input} placeholder="資産コード" value={filters.assetCode} onChange={handleChange} onKeyDown={handleKeyDown} />
         <input name="name" className={styles.input} placeholder="資産名" value={filters.name} onChange={handleChange} onKeyDown={handleKeyDown} />
         <input name="modelNumber" className={styles.input} placeholder="型式名" value={filters.modelNumber} onChange={handleChange} onKeyDown={handleKeyDown} />
-        <input name="manager" className={styles.input} placeholder="管理者名" value={filters.manager} onChange={handleChange} onKeyDown={handleKeyDown} />
+        <input name="manager" className={styles.input} placeholder="使用者名" value={filters.manager} onChange={handleChange} onKeyDown={handleKeyDown} />
         <input name="location" className={styles.input} placeholder="管理場所" value={filters.location} onChange={handleChange} onKeyDown={handleKeyDown} />
       </div>
 

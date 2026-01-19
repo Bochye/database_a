@@ -96,33 +96,46 @@ export default function DashboardPage() {
   }, [performLogout]);
 
   useEffect(() => {
-    const checkUserStatus = async () => {
+    const checkUserStatus = async (isInitial = false) => {
       const loggedInUser = localStorage.getItem('loggedInUser');
       const adminFlag = localStorage.getItem('isAdmin') === 'true';
 
       if (!loggedInUser) {
         router.push('/login');
-        return;
+        return false;
       }
 
       try {
         const res = await fetch(`/api/accounts?userid=${loggedInUser}`);
         const data = await res.json();
         const userExists = data.accounts?.some((u: any) => u.userid === loggedInUser);
-        
+
         if (!res.ok || !userExists) {
-          alert('セッションが無効です。再度ログインしてください。');
+          alert('アカウントが削除されました。ログアウトします。');
           performLogout();
-          return;
+          return false;
         }
 
-        setUser(loggedInUser);
-        setIsAdmin(adminFlag);
+        if (isInitial) {
+          setUser(loggedInUser);
+          setIsAdmin(adminFlag);
+        }
+        return true;
       } catch (err) {
         console.error("ユーザー確認エラー:", err);
+        return true; // ネットワークエラー時はログアウトしない
       }
     };
-    checkUserStatus();
+
+    // 初回チェック
+    checkUserStatus(true);
+
+    // 定期チェック（30秒ごと）
+    const intervalId = setInterval(() => {
+      checkUserStatus(false);
+    }, 30000);
+
+    return () => clearInterval(intervalId);
   }, [router, performLogout]);
 
   useEffect(() => {
@@ -145,6 +158,16 @@ export default function DashboardPage() {
   const formatDateTime = (dateString?: string | null) => {
     if (!dateString) return '-';
     return new Date(dateString).toLocaleString('ja-JP');
+  };
+
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'USED': return '使用中';
+      case 'UNUSED': return '未使用';
+      case 'UNKNOWN': return '不明';
+      case 'DISPOSED': return '除却';
+      default: return status;
+    }
   };
 
   if (!user) return <p>ログイン状態を確認中...</p>;
@@ -232,7 +255,7 @@ export default function DashboardPage() {
                   <tr>
                     {displayMode === 'DETAIL' && (<><th>ID</th><th>資産コード</th></>)}
                     <th>資産名</th><th>型式</th><th>取得年月日</th>
-                    <th>管理者</th><th>管理場所</th><th>状態</th><th>操作</th>
+                    <th>使用者</th><th>管理場所</th><th>状態</th><th>操作</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -244,7 +267,7 @@ export default function DashboardPage() {
                       <td>{formatDate(item.acquisitionDate)}</td>
                       <td>{item.manager || '-'}</td>
                       <td>{item.location || '-'}</td>
-                      <td><span className={styles.statusLabel}>{item.status}</span></td>
+                      <td><span className={styles.statusLabel}>{getStatusLabel(item.status)}</span></td>
                       <td className={styles.actionCell} onClick={(e) => e.stopPropagation()}>
                         <div className={styles.actionButtons}>
                           {isAdmin ? (
@@ -257,14 +280,29 @@ export default function DashboardPage() {
                                 } as any); 
                                 setIsModalOpen(true);
                               }} className={styles.editButton}>編集</button>
-                              <button onClick={(e) => { e.stopPropagation(); setTransferTarget(item); }} className={styles.secondaryButton}>引継ぎ</button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setTransferTarget(item); }}
+                                className={styles.secondaryButton}
+                                disabled={item.status === 'DISPOSED'}
+                                style={item.status === 'DISPOSED' ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
+                              >
+                                引継ぎ
+                              </button>
                               <button onClick={(e) => {
                                 e.stopPropagation();
                                 if(confirm('削除しますか？')) fetch(`/api/items?id=${item.id}`, {method: 'DELETE'}).then(() => handleReload());
                               }} className={styles.deleteButton}>削除</button>
                             </>
                           ) : (
-                            <button onClick={(e) => { e.stopPropagation(); setRequestTarget(item); }} className={styles.requestButton}>申請</button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setRequestTarget(item); }}
+                              className={styles.requestButton}
+                              disabled={item.status === 'DISPOSED'}
+                              style={item.status === 'DISPOSED' ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
+                              title={item.status === 'DISPOSED' ? '除却済みの資産は申請できません' : ''}
+                            >
+                              申請
+                            </button>
                           )}
                         </div>
                       </td>
@@ -309,7 +347,7 @@ export default function DashboardPage() {
               <div className={styles.infoRow}><label>資産コード</label><span>{selectedItem.assetCode || '-'}</span></div>
               <div className={styles.infoRow}><label>資産名</label><span>{selectedItem.name}</span></div>
               <div className={styles.infoRow}><label>取得価額</label><span>{selectedItem.acquisitionCost?.toLocaleString()}円</span></div>
-              <div className={styles.infoRow}><label>管理者</label><span>{selectedItem.ownerid || '-'}</span></div>
+              <div className={styles.infoRow}><label>使用者</label><span>{selectedItem.manager || '-'}</span></div>
               <div className={styles.infoRow}><label>最終更新日時</label><span>{formatDateTime(selectedItem.updatedAt)}</span></div>
             </div>
             <div className={styles.infoCardFooter}>

@@ -256,7 +256,7 @@ export default function AdminRequests() {
                     <div className={styles.infoRow}><label>型式</label><span>{selectedReq.item.modelNumber || '-'}</span></div>
                     <div className={styles.infoRow}><label>取得年月日</label><span>{selectedReq.item.acquisitionDate || '-'}</span></div>
                     <div className={styles.infoRow}><label>設置・管理場所</label><span>{selectedReq.item.location || '-'}</span></div>
-                    <div className={styles.infoRow}><label>現在の管理者</label><span>{selectedReq.item.manager || '-'}</span></div>
+                    <div className={styles.infoRow}><label>現在の使用者</label><span>{selectedReq.item.manager || '-'}</span></div>
                     <div className={styles.infoRow}><label>所有者ID</label><span>{selectedReq.item.ownerid}</span></div>
                     <div className={styles.infoRow}><label>所属部署</label><span>{selectedReq.item.department || '-'}</span></div>
                   </div>

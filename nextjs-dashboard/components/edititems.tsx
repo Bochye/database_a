@@ -1,9 +1,15 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import styles from './edititems.module.css';
 // 自動生成関数をインポート（パスは環境に合わせて調整してください）
 import { generateAssetCode } from '../app/api/utils/generateAssetCode';
+
+interface AccountOption {
+  id: number;
+  userid: string;
+  department?: string;
+}
 
 export interface ClientItem {
   id: number;
@@ -58,13 +64,50 @@ export default function EditItems({ onClose, onSave, ownerId, initialItem }: Edi
   const [formData, setFormData] = useState<FormState>(initialFormState);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+
   // 手動入力を有効にするかどうかのフラグ
   const [isManualCode, setIsManualCode] = useState(false);
+
+  // 使用者サジェスト用
+  const [accounts, setAccounts] = useState<AccountOption[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [filteredAccounts, setFilteredAccounts] = useState<AccountOption[]>([]);
+  const managerInputRef = useRef<HTMLInputElement>(null);
+  const suggestionsRef = useRef<HTMLDivElement>(null);
 
   const isEditing = !!initialItem;
   const modalTitle = isEditing ? '資産情報の編集' : '新規資産の追加';
   const actionText = isEditing ? '更新' : '追加';
+
+  // アカウント一覧を取得
+  useEffect(() => {
+    const loadAccounts = async () => {
+      try {
+        const res = await fetch('/api/accounts');
+        const data = await res.json();
+        setAccounts(data.accounts || []);
+      } catch (error) {
+        console.error('Failed to load accounts');
+      }
+    };
+    loadAccounts();
+  }, []);
+
+  // サジェスト外クリックで閉じる
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        suggestionsRef.current &&
+        !suggestionsRef.current.contains(e.target as Node) &&
+        managerInputRef.current &&
+        !managerInputRef.current.contains(e.target as Node)
+      ) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   useEffect(() => {
     if (initialItem) {
@@ -98,6 +141,43 @@ export default function EditItems({ onClose, onSave, ownerId, initialItem }: Edi
     }));
   };
 
+  // 使用者フィールドの入力ハンドラー
+  const handleManagerChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setFormData((prev) => ({ ...prev, manager: value }));
+
+    // フィルタリング
+    if (value.trim()) {
+      const filtered = accounts.filter(acc =>
+        acc.userid.toLowerCase().includes(value.toLowerCase())
+      );
+      setFilteredAccounts(filtered);
+      setShowSuggestions(true);
+    } else {
+      setFilteredAccounts(accounts);
+      setShowSuggestions(true);
+    }
+  };
+
+  // サジェスト選択
+  const handleSelectAccount = (userid: string) => {
+    setFormData((prev) => ({ ...prev, manager: userid }));
+    setShowSuggestions(false);
+  };
+
+  // 入力フォーカス時にサジェスト表示
+  const handleManagerFocus = () => {
+    if (formData.manager.trim()) {
+      const filtered = accounts.filter(acc =>
+        acc.userid.toLowerCase().includes(formData.manager.toLowerCase())
+      );
+      setFilteredAccounts(filtered);
+    } else {
+      setFilteredAccounts(accounts);
+    }
+    setShowSuggestions(true);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -117,14 +197,14 @@ export default function EditItems({ onClose, onSave, ownerId, initialItem }: Edi
     }
 
     try {
-      // 1. 管理者の存在チェック
+      // 1. 使用者の存在チェック
       if (formData.manager) {
         const checkRes = await fetch(`/api/accounts?userid=${formData.manager}`);
         const checkData = await checkRes.json();
         const userExists = checkData.accounts?.some((u: any) => u.userid === formData.manager);
-        
+
         if (!userExists) {
-          throw new Error(`管理者「${formData.manager}」は登録されていません。`);
+          throw new Error(`使用者「${formData.manager}」は登録されていません。`);
         }
       }
 
@@ -257,16 +337,57 @@ export default function EditItems({ onClose, onSave, ownerId, initialItem }: Edi
               <input type="number" name="stock" value={formData.stock} onChange={handleChange} min="1" required className={styles.inputField} />
             </label>
 
-            <label className={styles.formLabel}>
-              <span className={styles.labelText}>管理者</span>
-              <input 
-                type="text" 
-                name="manager" 
-                value={formData.manager} 
-                onChange={handleChange} 
-                className={styles.inputField} 
-                placeholder="登録済みのユーザーID"
+            <label className={styles.formLabel} style={{ position: 'relative' }}>
+              <span className={styles.labelText}>使用者</span>
+              <input
+                ref={managerInputRef}
+                type="text"
+                name="manager"
+                value={formData.manager}
+                onChange={handleManagerChange}
+                onFocus={handleManagerFocus}
+                className={styles.inputField}
+                placeholder="ユーザーIDを入力"
+                autoComplete="off"
               />
+              {showSuggestions && filteredAccounts.length > 0 && (
+                <div
+                  ref={suggestionsRef}
+                  style={{
+                    position: 'absolute',
+                    top: '100%',
+                    left: 0,
+                    right: 0,
+                    background: '#fff',
+                    border: '1px solid #ddd',
+                    borderRadius: '4px',
+                    maxHeight: '150px',
+                    overflowY: 'auto',
+                    zIndex: 1000,
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
+                  }}
+                >
+                  {filteredAccounts.map(acc => (
+                    <div
+                      key={acc.id}
+                      onClick={() => handleSelectAccount(acc.userid)}
+                      style={{
+                        padding: '8px 12px',
+                        cursor: 'pointer',
+                        borderBottom: '1px solid #eee',
+                        fontSize: '14px'
+                      }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = '#f0f4f8'}
+                      onMouseLeave={(e) => e.currentTarget.style.background = '#fff'}
+                    >
+                      <span style={{ fontWeight: 'bold' }}>{acc.userid}</span>
+                      <span style={{ color: '#888', marginLeft: '8px', fontSize: '12px' }}>
+                        ({acc.department || '-'})
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </label>
 
             <label className={styles.formLabel}>
@@ -277,10 +398,10 @@ export default function EditItems({ onClose, onSave, ownerId, initialItem }: Edi
             <label className={styles.formLabel}>
               <span className={styles.labelText}>状態</span>
               <select name="status" value={formData.status} onChange={handleChange} className={`${styles.inputField} ${styles.selectField}`}>
-                <option value="USED">使用中 (USED)</option>
-                <option value="UNUSED">未使用 (UNUSED)</option>
-                <option value="UNKNOWN">不明 (UNKNOWN)</option>
-                <option value="DISPOSED">除却 (DISPOSED)</option>
+                <option value="USED">使用中</option>
+                <option value="UNUSED">未使用</option>
+                <option value="UNKNOWN">不明</option>
+                <option value="DISPOSED">除却</option>
               </select>
             </label>
 
