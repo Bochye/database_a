@@ -5,33 +5,107 @@ const prisma = new PrismaClient();
 
 /**
  * 管理者が新しい棚卸しラウンドを開始するAPI (POST)
+ * carryOver: true の場合、前回の未適用データを引き継ぐ
  */
 export async function POST(req: NextRequest) {
   try {
-    const { title, adminId } = await req.json();
+    const { title, adminId, carryOver } = await req.json();
 
     if (!title || !adminId) {
       return NextResponse.json({ error: 'タイトルと管理者IDは必須です。' }, { status: 400 });
     }
 
     // トランザクションで一括処理
-    const newRound = await prisma.$transaction(async (tx) => {
-      // 1. 既存の全てのラウンドを「過去」にする（isCurrent: false）
+    const result = await prisma.$transaction(async (tx) => {
+      // 1. 引き継ぎ元のラウンドを取得
+      // まずアクティブなラウンドを探し、なければ直近の終了したラウンドを参照
+      let previousRound = await tx.inventoryRounds.findFirst({
+        where: { isCurrent: true }
+      });
+
+      if (!previousRound) {
+        previousRound = await tx.inventoryRounds.findFirst({
+          where: { isCurrent: false },
+          orderBy: { createdAt: 'desc' }
+        });
+      }
+
+      // 2. 前回の未適用レコードの処理
+      let pendingRecords: any[] = [];
+      let deletedCount = 0;
+      if (previousRound) {
+        if (carryOver) {
+          // 引き継ぐ場合：未適用レコードを取得（後でコピー）
+          pendingRecords = await tx.inventoryRecords.findMany({
+            where: {
+              roundId: previousRound.id,
+              status: { in: ['PENDING', 'RESUBMIT_REQUESTED'] }
+            }
+          });
+        } else {
+          // 引き継がない場合：未適用レコードを削除
+          const deleteResult = await tx.inventoryRecords.deleteMany({
+            where: {
+              roundId: previousRound.id,
+              status: { in: ['PENDING', 'RESUBMIT_REQUESTED'] }
+            }
+          });
+          deletedCount = deleteResult.count;
+        }
+      }
+
+      // 3. 既存の全てのラウンドを「過去」にする（isCurrent: false）
       await tx.inventoryRounds.updateMany({
         data: { isCurrent: false }
       });
 
-      // 2. 新しい棚卸しラウンドを作成（isCurrent: true）
-      return await tx.inventoryRounds.create({
+      // 4. 新しい棚卸しラウンドを作成（isCurrent: true）
+      const newRound = await tx.inventoryRounds.create({
         data: {
           title,
           createdBy: adminId,
           isCurrent: true
         }
       });
+
+      // 5. 引き継ぎが有効な場合、前回の未適用レコードを新しいラウンドにコピー
+      let carriedOverCount = 0;
+      if (pendingRecords.length > 0) {
+        for (const record of pendingRecords) {
+          await tx.inventoryRecords.create({
+            data: {
+              itemId: record.itemId,
+              roundId: newRound.id,
+              ownerId: record.ownerId,
+              newLocation: record.newLocation,
+              newStatus: record.newStatus,
+              newStock: record.newStock,
+              isApproved: false,
+              status: 'PENDING', // 引き継ぎ時はPENDINGにリセット
+              confirmedAt: record.confirmedAt // 元の報告日時を保持
+            }
+          });
+          carriedOverCount++;
+        }
+      }
+
+      return { newRound, carriedOverCount, deletedCount };
     });
 
-    return NextResponse.json({ success: true, round: newRound }, { status: 201 });
+    let message = '新しい棚卸しを開始しました。';
+    if (result.carriedOverCount > 0) {
+      message = `前回の未適用データ ${result.carriedOverCount} 件を引き継ぎました。`;
+    } else if (result.deletedCount > 0) {
+      message = `前回の未適用データ ${result.deletedCount} 件を削除しました。`;
+    }
+
+    return NextResponse.json({
+      success: true,
+      round: result.newRound,
+      carriedOverCount: result.carriedOverCount,
+      deletedCount: result.deletedCount,
+      message
+    }, { status: 201 });
   } catch (error) {
     console.error('InventoryRound POST Error:', error);
     return NextResponse.json({ error: '棚卸しのリセットに失敗しました。' }, { status: 500 });
@@ -42,14 +116,39 @@ export async function POST(req: NextRequest) {
 
 /**
  * 現在アクティブなラウンド情報を取得するAPI (GET)
+ * 未適用データの件数も返す（新規開始時の引き継ぎ確認用）
  */
 export async function GET() {
   try {
+    // 現在アクティブなラウンド
     const currentRound = await prisma.inventoryRounds.findFirst({
       where: { isCurrent: true },
       orderBy: { createdAt: 'desc' }
     });
-    return NextResponse.json({ currentRound }, { status: 200 });
+
+    // 未適用データの件数を取得
+    // アクティブなラウンドがない場合は、直近の終了したラウンドを参照
+    let pendingCount = 0;
+    let lastRoundForPending = currentRound;
+
+    if (!currentRound) {
+      // 直近の終了したラウンドを取得
+      lastRoundForPending = await prisma.inventoryRounds.findFirst({
+        where: { isCurrent: false },
+        orderBy: { createdAt: 'desc' }
+      });
+    }
+
+    if (lastRoundForPending) {
+      pendingCount = await prisma.inventoryRecords.count({
+        where: {
+          roundId: lastRoundForPending.id,
+          status: { in: ['PENDING', 'RESUBMIT_REQUESTED'] }
+        }
+      });
+    }
+
+    return NextResponse.json({ currentRound, pendingCount }, { status: 200 });
   } catch (error) {
     return NextResponse.json({ error: '取得に失敗しました。' }, { status: 500 });
   } finally {

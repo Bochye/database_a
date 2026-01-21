@@ -11,6 +11,7 @@ export default function InventoryAdmin() {
   const [selectedRecord, setSelectedRecord] = useState<any | null>(null);
   const [newRoundTitle, setNewRoundTitle] = useState('');
   const [currentRound, setCurrentRound] = useState<{ id: number; title: string } | null>(null);
+  const [pendingCount, setPendingCount] = useState<number>(0); // 未適用データの件数
 
   const [isAdminMode, setIsAdminMode] = useState(true);
   const [adminId, setAdminId] = useState<string | null>(null);
@@ -31,6 +32,7 @@ export default function InventoryAdmin() {
 
       setUserStats(dataRequests.userStats || {});
       setCurrentRound(dataRound.currentRound || null);
+      setPendingCount(dataRound.pendingCount || 0); // 未適用件数を保存
     } catch (error) {
       console.error('Load Error:', error);
     } finally {
@@ -42,13 +44,38 @@ export default function InventoryAdmin() {
 
   const startNewRound = async () => {
     if (!newRoundTitle) return alert('棚卸しの名称を入力してください');
+
+    // 1. まず開始するかどうか確認（ここでキャンセルすれば完全に中止）
     if (!window.confirm('新しい棚卸しを開始しますか？')) return;
+
+    // 2. 未適用データがある場合は引き継ぐかどうか確認
+    let carryOver = false;
+    if (pendingCount > 0) {
+      carryOver = window.confirm(
+        `前回の棚卸しに未適用のデータが ${pendingCount} 件あります。\n\n` +
+        `引き継ぎますか？\n\n` +
+        `【OK】→ 引き継ぐ\n` +
+        `【キャンセル】→ 引き継がない`
+      );
+    }
+
     const res = await fetch('/api/inventoryrounds', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: newRoundTitle, adminId: adminId || 'admin' })
+      body: JSON.stringify({ title: newRoundTitle, adminId: adminId || 'admin', carryOver })
     });
-    if (res.ok) { setNewRoundTitle(''); load(); alert('開始しました'); }
+    if (res.ok) {
+      const data = await res.json();
+      setNewRoundTitle('');
+      load();
+      if (data.carriedOverCount > 0) {
+        alert(`開始しました。\n\n前回の未適用データ ${data.carriedOverCount} 件を引き継ぎました。`);
+      } else if (data.deletedCount > 0) {
+        alert(`開始しました。\n\n前回の未適用データ ${data.deletedCount} 件を削除しました。`);
+      } else {
+        alert('開始しました。');
+      }
+    }
   };
 
   const endCurrentRound = async () => {
@@ -211,7 +238,7 @@ export default function InventoryAdmin() {
           <h4 style={{ color: '#4a6fa5', margin: '0 0 10px 0' }}>新しい棚卸しを開始</h4>
           <div style={{ display: 'flex', gap: '10px' }}>
             <input className={styles.inputField} style={{ flex: 1 }} value={newRoundTitle} onChange={e => setNewRoundTitle(e.target.value)} placeholder="例: 2025年度 棚卸し" />
-            <button className={styles.addButton} onClick={startNewRound}>開始</button>
+            <button type="button" className={styles.addButton} onClick={startNewRound}>開始</button>
           </div>
           {currentRound && (
             <p style={{ fontSize: '12px', color: '#e65100', marginTop: '10px', marginBottom: 0 }}>

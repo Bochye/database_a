@@ -83,6 +83,14 @@ const items = await prisma.items.findMany({
   }
 }
 
+// 日付バリデーション用ヘルパー関数
+function parseAndValidateDate(dateStr: string | null | undefined): Date | null {
+  if (!dateStr) return null;
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return null; // Invalid Date
+  return date;
+}
+
 // --- 新規登録 (POST) ---
 export async function POST(req: NextRequest) {
   try {
@@ -96,13 +104,27 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: '必須項目が不足しています。' }, { status: 400 });
     }
 
+    // 日付のバリデーション
+    const acqDate = parseAndValidateDate(acquisitionDate);
+    const dispDate = parseAndValidateDate(disposalDate);
+
+    if (acquisitionDate && !acqDate) {
+      return NextResponse.json({ error: '取得日の形式が無効です。' }, { status: 400 });
+    }
+    if (disposalDate && !dispDate) {
+      return NextResponse.json({ error: '廃棄日の形式が無効です。' }, { status: 400 });
+    }
+    if (acqDate && dispDate && dispDate < acqDate) {
+      return NextResponse.json({ error: '廃棄日は取得日より後の日付にしてください。' }, { status: 400 });
+    }
+
     const newItem = await prisma.items.create({
       data: {
         assetCode,
         name,
         modelNumber: modelNumber || null,
-        acquisitionDate: acquisitionDate ? new Date(acquisitionDate) : null,
-        disposalDate: disposalDate ? new Date(disposalDate) : null,
+        acquisitionDate: acqDate,
+        disposalDate: dispDate,
         acquisitionCost: acquisitionCost ? Number(acquisitionCost) : null,
         manager: manager || null,
         location: location || null,
@@ -136,14 +158,28 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: '更新に必要な項目が不足しています。' }, { status: 400 });
     }
 
+    // 日付のバリデーション
+    const acqDate = parseAndValidateDate(acquisitionDate);
+    const dispDate = parseAndValidateDate(disposalDate);
+
+    if (acquisitionDate && !acqDate) {
+      return NextResponse.json({ error: '取得日の形式が無効です。' }, { status: 400 });
+    }
+    if (disposalDate && !dispDate) {
+      return NextResponse.json({ error: '廃棄日の形式が無効です。' }, { status: 400 });
+    }
+    if (acqDate && dispDate && dispDate < acqDate) {
+      return NextResponse.json({ error: '廃棄日は取得日より後の日付にしてください。' }, { status: 400 });
+    }
+
     const updatedItem = await prisma.items.update({
       where: { id: Number(id) },
       data: {
         assetCode,
         name,
         modelNumber: modelNumber || null,
-        acquisitionDate: acquisitionDate ? new Date(acquisitionDate) : null,
-        disposalDate: disposalDate ? new Date(disposalDate) : null,
+        acquisitionDate: acqDate,
+        disposalDate: dispDate,
         acquisitionCost: acquisitionCost ? Number(acquisitionCost) : null,
         manager: manager || null,
         location: location || null,
