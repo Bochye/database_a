@@ -59,12 +59,12 @@ export default function SearchBar({ onSearch, isAdmin }: Props) {
       </div>
 
       <div className={styles.filterGroup}>
-        <select name="department" className={styles.select} value={filters.department} onChange={handleChange}>
+        <select name="department" className={styles.select} style={{ padding: '8px 12px', border: '1px solid #ddd', borderRadius: '1px', width: '120px' }} value={filters.department} onChange={handleChange}>
           <option value="">全ての学科</option>
           <option value="AD">AD</option><option value="EE">EE</option><option value="ME">ME</option><option value="CS">CS</option>
         </select>
 
-        <select name="status" className={styles.select} value={filters.status} onChange={handleChange}>
+        <select name="status" className={styles.select} style={{ padding: '8px 12px', border: '1px solid #ddd', borderRadius: '1px', width: '120px' }} value={filters.status} onChange={handleChange}>
           <option value="">全ての状態</option>
           <option value="USED">使用中</option><option value="UNUSED">未使用</option><option value="UNKNOWN">不明</option><option value="DISPOSED">除却</option>
         </select>

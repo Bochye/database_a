@@ -140,7 +140,7 @@ export default function AdminRequests() {
         />
         <select 
           className={styles.inputField} 
-          style={{ padding: '8px 12px', width: '130px', border: '1px solid #ddd' }}
+          style={{padding: '8px 12px', border: '1px solid #ddd', borderRadius: '1px', width: '120px'}}
           value={filterType} 
           onChange={e => setFilterType(e.target.value)}
         >
@@ -151,7 +151,7 @@ export default function AdminRequests() {
         </select>
         <select 
           className={styles.inputField} 
-          style={{ padding: '8px 12px', width: '130px', border: '1px solid #ddd' }}
+          style={{padding: '8px 12px', border: '1px solid #ddd', borderRadius: '1px'}}
           value={filterStatus} 
           onChange={e => setFilterStatus(e.target.value)}
         >
@@ -270,7 +270,7 @@ export default function AdminRequests() {
                 </label>
                 <textarea 
                   className={styles.inputField} 
-                  style={{ width: '100%', height: '80px', marginBottom: '15px', resize: 'none', border: '1px solid #4a6fa5', borderRadius: '2px', padding: '8px' }}
+                  style={{ width: '97%', height: '80px', marginBottom: '15px', resize: 'none', border: '1px solid #4a6fa5', borderRadius: '2px', padding: '8px' }}
                   value={adminNote}
                   onChange={(e) => setAdminNote(e.target.value)}
                   placeholder="理由を入力してください..."
