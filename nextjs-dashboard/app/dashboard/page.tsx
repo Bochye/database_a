@@ -348,6 +348,7 @@ export default function DashboardPage() {
               <div className={styles.infoRow}><label>資産名</label><span>{selectedItem.name}</span></div>
               <div className={styles.infoRow}><label>取得価額</label><span>{selectedItem.acquisitionCost?.toLocaleString()}円</span></div>
               <div className={styles.infoRow}><label>使用者</label><span>{selectedItem.manager || '-'}</span></div>
+              <div className={styles.infoRow}><label>最終編集者</label><span>{selectedItem.updatedBy || '-'}</span></div>
               <div className={styles.infoRow}><label>最終更新日時</label><span>{formatDateTime(selectedItem.updatedAt)}</span></div>
             </div>
             <div className={styles.infoCardFooter}>
@@ -359,7 +360,7 @@ export default function DashboardPage() {
 
       {/* 各種モーダル */}
       {isModalOpen && <EditItems onClose={() => { setIsModalOpen(false); setEditingItem(null); }} onSave={handleSave} ownerId={user!} initialItem={editingItem} />}
-      {transferTarget && <TransferModal itemId={transferTarget.id} currentManager={transferTarget.manager} onClose={() => setTransferTarget(null)} onUpdated={handleReload} />}
+      {transferTarget && <TransferModal itemId={transferTarget.id} currentManager={transferTarget.manager} onClose={() => setTransferTarget(null)} onUpdated={handleReload} userId={user!} />}
       {requestTarget && <RequestModal itemId={requestTarget.id} requesterId={user!} onClose={() => setRequestTarget(null)} onSubmitted={() => {}} />}
     </div>
   );

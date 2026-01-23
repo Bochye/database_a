@@ -183,7 +183,7 @@ export async function PATCH(req: NextRequest) {
             location: record.newLocation,
             status: record.newStatus as AssetStatus,
             stock: (record as any).newStock ?? undefined,
-            updatedBy: 'SYSTEM_ADMIN'
+            updatedBy: record.ownerId
           }
         });
 
@@ -243,7 +243,7 @@ export async function PATCH(req: NextRequest) {
               location: record.newLocation,
               status: record.newStatus as AssetStatus,
               stock: (record as any).newStock ?? undefined,
-              updatedBy: 'SYSTEM_ADMIN'
+              updatedBy: record.ownerId
             }
           });
         }

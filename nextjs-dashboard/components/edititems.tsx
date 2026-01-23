@@ -231,6 +231,7 @@ export default function EditItems({ onClose, onSave, ownerId, initialItem }: Edi
         status: formData.status,
         stock: formData.stock,
         ownerid: ownerId,
+        updatedBy: ownerId,
       };
 
       // 4. API送信

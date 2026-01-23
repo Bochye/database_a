@@ -8,9 +8,10 @@ interface Props {
   currentManager?: string | null;
   onClose: () => void;
   onUpdated: () => void;
+  userId: string;
 }
 
-export default function TransferModal({ itemId, currentManager, onClose, onUpdated }: Props) {
+export default function TransferModal({ itemId, currentManager, onClose, onUpdated, userId }: Props) {
   const [manager, setManager] = useState(''); // 新しい管理者は空で開始
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -24,7 +25,7 @@ export default function TransferModal({ itemId, currentManager, onClose, onUpdat
       const res = await fetch('/api/items', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: itemId, manager }),
+        body: JSON.stringify({ id: itemId, manager, updatedBy: userId }),
       });
 
       const data = await res.json();

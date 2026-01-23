@@ -17,6 +17,7 @@ interface InventoryItem {
   department?: string | null;
   stock?: number;
   updatedAt?: string | null;
+  updatedBy?: string | null;
   ownerid: string;
   InventoryRecords?: any[]; 
 }
@@ -269,6 +270,7 @@ const loadItems = async () => {
                     <div className={styles.infoRow}><label>取得年月日</label><span>{formatDate(selectedItem.acquisitionDate)}</span></div>
                     <div className={styles.infoRow}><label>取得価額</label><span>{selectedItem.acquisitionCost?.toLocaleString() || '-'}円</span></div>
                     <div className={styles.infoRow}><label>学科</label><span>{selectedItem.department || '-'}</span></div>
+                    <div className={styles.infoRow}><label>最終編集者</label><span>{selectedItem.updatedBy || '-'}</span></div>
                     <div className={styles.infoRow}><label>最終更新日時</label><span>{formatDateTime(selectedItem.updatedAt)}</span></div>
                   </div>
                 )}
