@@ -107,6 +107,16 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: '無効なステータスです。' }, { status: 400 });
     }
 
+    // 申請を取得して申請者IDを確認
+    const request = await prisma.requests.findUnique({
+      where: { id: Number(id) },
+      select: { requesterId: true, itemId: true }
+    });
+
+    if (!request) {
+      return NextResponse.json({ error: '申請が見つかりません。' }, { status: 404 });
+    }
+
     // 更新処理
     const updated = await prisma.requests.update({
       where: { id: Number(id) },
@@ -116,6 +126,16 @@ export async function PATCH(req: NextRequest) {
       },
       include: { item: true }
     });
+
+    // 承認された場合、備品の最終編集者を申請者に更新
+    if (status === 'APPROVED') {
+      await prisma.items.update({
+        where: { id: request.itemId },
+        data: {
+          updatedBy: request.requesterId,
+        }
+      });
+    }
 
     return NextResponse.json({ request: updated }, { status: 200 });
   } catch (e) {

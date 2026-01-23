@@ -10,7 +10,7 @@ datasource db {
 
 model Accounts {
   id        Int      @id @default(autoincrement())
-  userid    String
+  userid    String   @unique
   password  String
   isadmin   Boolean  @default(false)
   department Department @default(CS)
@@ -23,7 +23,7 @@ model Items {
   modelNumber      String?
   acquisitionDate  DateTime?
   disposalDate     DateTime?
-  acquisitionCost  Float?
+  acquisitionCost  BigInt?
   manager          String?
   location         String?
   status           AssetStatus        @default(USED)

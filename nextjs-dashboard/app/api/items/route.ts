@@ -3,6 +3,19 @@ import { PrismaClient, AssetStatus, Department } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
+// BigInt を Number に変換するヘルパー（JSON シリアライズ対応）
+function serializeItem(item: any) {
+  if (!item) return item;
+  return {
+    ...item,
+    acquisitionCost: item.acquisitionCost != null ? Number(item.acquisitionCost) : null,
+  };
+}
+
+function serializeItems(items: any[]) {
+  return items.map(serializeItem);
+}
+
 // --- 一覧取得 (GET) ---
 // 権限(isAdmin)とユーザー名(managerParam)に基づいて閲覧範囲を強制制限
 export async function GET(req: NextRequest) {
@@ -74,7 +87,7 @@ const items = await prisma.items.findMany({
   orderBy: { id: 'desc' },
 });
     
-    return NextResponse.json({ items }, { status: 200 });
+    return NextResponse.json({ items: serializeItems(items) }, { status: 200 });
   } catch (error) {
     console.error('Error fetching items:', error);
     return NextResponse.json({ error: '資産データの取得に失敗しました。' }, { status: 500 });
@@ -125,7 +138,7 @@ export async function POST(req: NextRequest) {
         modelNumber: modelNumber || null,
         acquisitionDate: acqDate,
         disposalDate: dispDate,
-        acquisitionCost: acquisitionCost ? Number(acquisitionCost) : null,
+        acquisitionCost: acquisitionCost ? BigInt(Math.floor(Number(acquisitionCost))) : null,
         manager: manager || null,
         location: location || null,
         status: (status as AssetStatus) || AssetStatus.USED,
@@ -136,7 +149,7 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    return NextResponse.json({ item: newItem }, { status: 201 });
+    return NextResponse.json({ item: serializeItem(newItem) }, { status: 201 });
   } catch (error: any) {
     const msg = error?.code === 'P2002' ? '資産コードが重複しています。' : '資産の追加に失敗しました。';
     return NextResponse.json({ error: msg }, { status: 500 });
@@ -180,7 +193,7 @@ export async function PUT(req: NextRequest) {
         modelNumber: modelNumber || null,
         acquisitionDate: acqDate,
         disposalDate: dispDate,
-        acquisitionCost: acquisitionCost ? Number(acquisitionCost) : null,
+        acquisitionCost: acquisitionCost ? BigInt(Math.floor(Number(acquisitionCost))) : null,
         manager: manager || null,
         location: location || null,
         status: (status as AssetStatus) || AssetStatus.USED,
@@ -191,7 +204,7 @@ export async function PUT(req: NextRequest) {
       },
     });
 
-    return NextResponse.json({ item: updatedItem }, { status: 200 });
+    return NextResponse.json({ item: serializeItem(updatedItem) }, { status: 200 });
   } catch (error: any) {
     if (error.code === 'P2025') return NextResponse.json({ error: '資産が見つかりません。' }, { status: 404 });
     return NextResponse.json({ error: '更新に失敗しました。' }, { status: 500 });
@@ -229,7 +242,7 @@ export async function PATCH(req: NextRequest) {
       data,
     });
 
-    return NextResponse.json({ item: updated }, { status: 200 });
+    return NextResponse.json({ item: serializeItem(updated) }, { status: 200 });
   } catch (error) {
     return NextResponse.json({ error: '更新に失敗しました。' }, { status: 500 });
   } finally {
