@@ -85,7 +85,7 @@ export default function LoginPage() {
             <label>パスワード</label>
             <input
               type="password"
-              placeholder="••••••••"
+              placeholder=""
               value={str_pass}
               onChange={e => setpassword(e.target.value)}
               onKeyDown={handleKeyDown}

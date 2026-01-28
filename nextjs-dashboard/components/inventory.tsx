@@ -19,6 +19,7 @@ interface InventoryItem {
   updatedAt?: string | null;
   updatedBy?: string | null;
   ownerid: string;
+  createdAt: string;
   InventoryRecords?: any[]; 
 }
 
@@ -27,7 +28,7 @@ export default function Inventory({ ownerId }: { ownerId: string }) {
   const [loading, setLoading] = useState(true);
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
   const [showFullDetail, setShowFullDetail] = useState(false); 
-  const [roundTitle, setRoundTitle] = useState<string>(''); // ★ 棚卸し名称用のステート
+  const [roundTitle, setRoundTitle] = useState<string>('');
 
   const [newLocation, setNewLocation] = useState('');
   const [newStatus, setNewStatus] = useState('');
@@ -44,43 +45,37 @@ export default function Inventory({ ownerId }: { ownerId: string }) {
     }
   };
 
-const loadItems = async () => {
-  setLoading(true);
-  try {
-    // 1. 資産一覧
-    const resItems = await fetch(`/api/items?isAdmin=false&ownerId=${ownerId}`);
-    const dataItems = await resItems.json();
-    setItems((dataItems.items || []).filter((i: any) => i.status !== 'DISPOSED'));
+  const loadItems = async () => {
+    setLoading(true);
+    try {
+      const resItems = await fetch(`/api/items?isAdmin=false&ownerId=${ownerId}`);
+      const dataItems = await resItems.json();
+      setItems((dataItems.items || []).filter((i: any) => i.status !== 'DISPOSED'));
 
-    // 2. 棚卸し情報の取得
-    const resReq = await fetch('/api/inventoryrequests');
-    const dataReq = await resReq.json();
+      const resReq = await fetch('/api/inventoryrequests');
+      const dataReq = await resReq.json();
 
-    // ★ 修正：APIが直接返す currentRound からタイトルを取得
-    if (dataReq.currentRound?.title) {
-      setRoundTitle(dataReq.currentRound.title);
-    } else {
-      setRoundTitle('-');
+      if (dataReq.currentRound?.title) {
+        setRoundTitle(dataReq.currentRound.title);
+      } else {
+        setRoundTitle('-');
+      }
+    } catch (err) {
+      console.error("Fetch error:", err);
+    } finally {
+      setLoading(false);
     }
-
-  } catch (err) {
-    console.error("Fetch error:", err);
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   useEffect(() => {
     loadItems();
   }, [ownerId]);
 
   const handleRowClick = (item: InventoryItem) => {
-    // 棚卸しが停止中なら入力不可
     if (!roundTitle || roundTitle === '-') return;
 
     const record = item.InventoryRecords?.[0] as any;
     const recordStatus = record?.status;
-    // 再申請依頼中以外のレコードがあれば入力不可
     const isSubmitted = record && recordStatus !== 'RESUBMIT_REQUESTED';
     if (isSubmitted || completedIds.has(item.id)) return;
 
@@ -139,7 +134,6 @@ const loadItems = async () => {
       <div className={styles.tableContainer}>
         <h3 style={{ marginBottom: '10px', color: '#4a6fa5', textAlign: 'center' }}>棚卸し実施画面</h3>
         
-        {/* ★ 棚卸し名称の表示エリア */}
         <div style={{ textAlign: 'center', marginBottom: '15px' }}>
           {roundTitle && roundTitle !== '-' ? (
             <span style={{
@@ -195,7 +189,6 @@ const loadItems = async () => {
               {items.map((item) => {
                 const record = item.InventoryRecords?.[0];
                 const recordStatus = record?.status;
-                // 再申請依頼中なら入力可能、それ以外のレコードがあれば入力不可
                 const needsResubmit = recordStatus === 'RESUBMIT_REQUESTED';
                 const isSubmitted = record && recordStatus !== 'RESUBMIT_REQUESTED';
                 const justCompleted = completedIds.has(item.id);
@@ -265,13 +258,16 @@ const loadItems = async () => {
                 
                 {showFullDetail && (
                   <div style={{ marginTop: '15px', paddingTop: '10px', borderTop: '1px dashed #cbd5e0', fontSize: '13px', color: '#4a5568' }}>
-                    <div className={styles.infoRow}><label>ID</label><span>{selectedItem.id.toString().padStart(6, '0')}</span></div>
-                    <div className={styles.infoRow}><label>型式</label><span>{selectedItem.modelNumber || '-'}</span></div>
-                    <div className={styles.infoRow}><label>取得年月日</label><span>{formatDate(selectedItem.acquisitionDate)}</span></div>
-                    <div className={styles.infoRow}><label>取得価額</label><span>{selectedItem.acquisitionCost?.toLocaleString() || '-'}円</span></div>
-                    <div className={styles.infoRow}><label>学科</label><span>{selectedItem.department || '-'}</span></div>
-                    <div className={styles.infoRow}><label>最終編集者</label><span>{selectedItem.updatedBy || '-'}</span></div>
-                    <div className={styles.infoRow}><label>最終更新日時</label><span>{formatDateTime(selectedItem.updatedAt)}</span></div>
+                    <div className={styles.infoRow} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}><label style={{ color: '#718096' }}>ID</label><span>{selectedItem.id.toString().padStart(6, '0')}</span></div>
+                    <div className={styles.infoRow} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}><label style={{ color: '#718096' }}>形式</label><span>{selectedItem.modelNumber || '-'}</span></div>
+                    <div className={styles.infoRow} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}><label style={{ color: '#718096' }}>取得年月日</label><span>{formatDate(selectedItem.acquisitionDate)}</span></div>
+                    <div className={styles.infoRow} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}><label style={{ color: '#718096' }}>取得価額</label><span>{selectedItem.acquisitionCost?.toLocaleString() || '-'}円</span></div>
+                    <div className={styles.infoRow} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}><label style={{ color: '#718096' }}>学科</label><span>{selectedItem.department || '-'}</span></div>
+                    <div className={styles.infoRow} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}><label style={{ color: '#718096' }}>使用者</label><span>{selectedItem.manager || '-'}</span></div>
+                    <div className={styles.infoRow} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}><label style={{ color: '#718096' }}>作成者</label><span>{selectedItem.ownerid || '-'}</span></div>
+                    <div className={styles.infoRow} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}><label style={{ color: '#718096' }}>作成日時</label><span>{formatDateTime(selectedItem.createdAt)}</span></div>
+                    <div className={styles.infoRow} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}><label style={{ color: '#718096' }}>最終編集者</label><span>{selectedItem.updatedBy || '-'}</span></div>
+                    <div className={styles.infoRow} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}><label style={{ color: '#718096' }}>最終更新日時</label><span>{formatDateTime(selectedItem.updatedAt)}</span></div>
                   </div>
                 )}
               </div>

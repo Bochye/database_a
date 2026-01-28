@@ -25,7 +25,9 @@ type Req = {
     ownerid: string;
     createdAt: string;
     updatedAt?: string | null;
+    updatedBy?: string | null;
     department?: string | null;
+    stock?: number;
   };
 };
 
@@ -36,7 +38,6 @@ export default function AdminRequests() {
   const [selectedReq, setSelectedReq] = useState<Req | null>(null);
   const [showAssetDetail, setShowAssetDetail] = useState(false);
 
-  // --- 検索用ステート ---
   const [searchAssetName, setSearchAssetName] = useState('');
   const [searchRequester, setSearchRequester] = useState('');
   const [filterType, setFilterType] = useState('');
@@ -95,6 +96,16 @@ export default function AdminRequests() {
     return statuses[status] || status;
   };
 
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'USED': return '使用中';
+      case 'UNUSED': return '未使用';
+      case 'UNKNOWN': return '不明';
+      case 'DISPOSED': return '除却';
+      default: return status;
+    }
+  };
+
   const getStatusStyle = (status: string) => {
     switch (status) {
       case 'PENDING': return { background: '#fff4e5', color: '#663c00' };
@@ -122,7 +133,6 @@ export default function AdminRequests() {
 
   return (
     <div className={styles.tabContent}>
-      {/* 検索パネル */}
       <div style={{ background: '#fff', padding: '20px', borderRadius: '1px', marginBottom: '20px', boxShadow: '0 2px 10px rgba(0,0,0,0.05)', display: 'flex', gap: '10px', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
         <input 
           className={styles.inputField} 
@@ -140,7 +150,7 @@ export default function AdminRequests() {
         />
         <select 
           className={styles.inputField} 
-          style={{padding: '8px 12px', border: '1px solid #ddd', borderRadius: '1px', width: '120px'}}
+          style={{ padding: '8px 12px', width: '130px', border: '1px solid #ddd' }}
           value={filterType} 
           onChange={e => setFilterType(e.target.value)}
         >
@@ -151,7 +161,7 @@ export default function AdminRequests() {
         </select>
         <select 
           className={styles.inputField} 
-          style={{padding: '8px 12px', border: '1px solid #ddd', borderRadius: '1px'}}
+          style={{ padding: '8px 12px', width: '130px', border: '1px solid #ddd' }}
           value={filterStatus} 
           onChange={e => setFilterStatus(e.target.value)}
         >
@@ -210,7 +220,6 @@ export default function AdminRequests() {
         )}
       </div>
 
-      {/* 申請詳細モーダル */}
       {selectedReq && (
         <div className={styles.modalOverlay} onClick={() => setSelectedReq(null)}>
           <div className={styles.infoCard} style={{ maxWidth: '600px' }} onClick={(e) => e.stopPropagation()}>
@@ -234,7 +243,6 @@ export default function AdminRequests() {
               
               <hr style={{ margin: '15px 0', border: 'none', borderBottom: '1px solid #eee' }} />
               
-              {/* 対象資産のセクション */}
               <div style={{ background: '#f8f9fa', padding: '12px', borderRadius: '4px', marginBottom: '15px', border: '1px solid #e9ecef' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ textAlign: 'left' }}>
@@ -246,34 +254,40 @@ export default function AdminRequests() {
                     style={{ fontSize: '11px', padding: '5px 10px' }}
                     onClick={() => setShowAssetDetail(!showAssetDetail)}
                   >
-                    {showAssetDetail ? '詳細を隠す' : '資産の全詳細を見る'}
+                    {showAssetDetail ? '詳細を隠す △' : '資産の全詳細を見る ▽'}
                   </button>
                 </div>
 
                 {showAssetDetail && (
                   <div style={{ marginTop: '12px', borderTop: '1px dashed #ccc', paddingTop: '10px', fontSize: '13px' }}>
-                    <div className={styles.infoRow}><label>資産コード</label><span>{selectedReq.item.assetCode}</span></div>
-                    <div className={styles.infoRow}><label>型式</label><span>{selectedReq.item.modelNumber || '-'}</span></div>
-                    <div className={styles.infoRow}><label>取得年月日</label><span>{selectedReq.item.acquisitionDate || '-'}</span></div>
-                    <div className={styles.infoRow}><label>設置・管理場所</label><span>{selectedReq.item.location || '-'}</span></div>
-                    <div className={styles.infoRow}><label>現在の使用者</label><span>{selectedReq.item.manager || '-'}</span></div>
-                    <div className={styles.infoRow}><label>所有者ID</label><span>{selectedReq.item.ownerid}</span></div>
-                    <div className={styles.infoRow}><label>所属部署</label><span>{selectedReq.item.department || '-'}</span></div>
+                    <div className={styles.infoRow} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}><label style={{ color: '#718096' }}>システムID</label><span>{selectedReq.item.id.toString().padStart(6, '0')}</span></div>
+                    <div className={styles.infoRow} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}><label style={{ color: '#718096' }}>資産コード</label><span>{selectedReq.item.assetCode}</span></div>
+                    <div className={styles.infoRow} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}><label style={{ color: '#718096' }}>型式</label><span>{selectedReq.item.modelNumber || '-'}</span></div>
+                    <div className={styles.infoRow} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}><label style={{ color: '#718096' }}>個数</label><span>{selectedReq.item.stock ?? 1}</span></div>
+                    <div className={styles.infoRow} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}><label style={{ color: '#718096' }}>状態</label><span>{getStatusLabel(selectedReq.item.status)}</span></div>
+                    <div className={styles.infoRow} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}><label style={{ color: '#718096' }}>管理場所</label><span>{selectedReq.item.location || '-'}</span></div>
+                    <div className={styles.infoRow} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}><label style={{ color: '#718096' }}>取得年月日</label><span>{selectedReq.item.acquisitionDate ? new Date(selectedReq.item.acquisitionDate).toLocaleDateString('ja-JP') : '-'}</span></div>
+                    <div className={styles.infoRow} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}><label style={{ color: '#718096' }}>取得価額</label><span>{selectedReq.item.acquisitionCost?.toLocaleString() || '-'}円</span></div>
+                    <div className={styles.infoRow} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}><label style={{ color: '#718096' }}>部署/学科</label><span>{selectedReq.item.department || '-'}</span></div>
+                    <div className={styles.infoRow} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}><label style={{ color: '#718096' }}>管理者</label><span>{selectedReq.item.manager || '-'}</span></div>
+                    <div className={styles.infoRow} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}><label style={{ color: '#718096' }}>作成者</label><span>{selectedReq.item.ownerid}</span></div>
+                    <div className={styles.infoRow} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}><label style={{ color: '#718096' }}>作成日時</label><span>{new Date(selectedReq.item.createdAt).toLocaleString('ja-JP')}</span></div>
+                    <div className={styles.infoRow} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}><label style={{ color: '#718096' }}>最終編集者</label><span>{selectedReq.item.updatedBy || '-'}</span></div>
+                    <div className={styles.infoRow} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}><label style={{ color: '#718096' }}>最終更新日時</label><span>{selectedReq.item.updatedAt ? new Date(selectedReq.item.updatedAt).toLocaleString('ja-JP') : '-'}</span></div>
                   </div>
                 )}
               </div>
 
-              {/* 管理者操作エリア */}
               <div style={{ marginTop: '10px', padding: '15px', border: '1px solid #4a6fa5', borderRadius: '4px', background: '#f0f4f8' }}>
                 <label style={{ display: 'block', fontSize: '13px', fontWeight: 'bold', marginBottom: '8px', color: '#4a6fa5', textAlign: 'left' }}>
                   管理者メモ (承認/却下理由)
                 </label>
                 <textarea 
                   className={styles.inputField} 
-                  style={{ width: '97%', height: '80px', marginBottom: '15px', resize: 'none', border: '1px solid #4a6fa5', borderRadius: '2px', padding: '8px' }}
+                  style={{ width: '96%', height: '80px', marginBottom: '15px', resize: 'none', border: '1px solid #4a6fa5', borderRadius: '2px', padding: '8px' }}
                   value={adminNote}
                   onChange={(e) => setAdminNote(e.target.value)}
-                  placeholder="理由を入力してください..."
+                  placeholder={selectedReq.status === 'PENDING' ? "理由を入力してください..." : ""}
                   disabled={selectedReq.status !== 'PENDING'}
                 />
                 

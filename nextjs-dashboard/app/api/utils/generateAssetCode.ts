@@ -12,5 +12,5 @@ export function generateAssetCode(
   const random1 = Math.floor(Math.random() * 10);        // 0–9
   const id5 = String(id).padStart(5, '0');               // 5桁
 
-  return `2${year}_${random3}_${id5}_${month}${day}${random1}`;
+  return `2${year}-${random3}${id5}-${month}${day}${random1}`;
 }

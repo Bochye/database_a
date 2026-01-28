@@ -9,7 +9,7 @@ import SearchBar, { SearchFilters } from '../../components/searchbar';
 import TransferModal from '../../components/transfermodal';
 import RequestModal from '../../components/requestmodal';
 import AdminRequests from '../../components/adminrequests';
-import UserRequests from '../../components/userrequests'; // ★ 追加
+import UserRequests from '../../components/userrequests';
 import AdminUsers from '../../components/adminusers';
 import InventoryAdmin from '../../components/InventoryAdmin';
 import Inventory from '../../components/inventory';
@@ -45,7 +45,7 @@ export default function DashboardPage() {
   const [items, setItems] = useState<ItemRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<TabKey>('ITEMS');
+  const [tab, setTab] = useState<TabKey>('ITEMS'); // 初期値
   const [transferTarget, setTransferTarget] = useState<ItemRow | null>(null);
   const [requestTarget, setRequestTarget] = useState<ItemRow | null>(null);
   const [displayMode, setDisplayMode] = useState<DisplayMode>('SIMPLE');
@@ -55,9 +55,11 @@ export default function DashboardPage() {
 
   const router = useRouter();
 
+  // ログアウト時にタブ情報もクリアする
   const performLogout = useCallback(() => {
     localStorage.removeItem('loggedInUser');
     localStorage.removeItem('isAdmin');
+    localStorage.removeItem('activeTab');
     router.push('/login');
   }, [router]);
 
@@ -95,6 +97,25 @@ export default function DashboardPage() {
     }
   }, [performLogout]);
 
+  // タブの状態を復元
+  useEffect(() => {
+    const savedTab = localStorage.getItem('activeTab') as TabKey;
+    if (savedTab) {
+      // 非管理者がUSERSタブを開こうとした場合のガード
+      const adminFlag = localStorage.getItem('isAdmin') === 'true';
+      if (savedTab === 'USERS' && !adminFlag) {
+        setTab('ITEMS');
+      } else {
+        setTab(savedTab);
+      }
+    }
+  }, []);
+
+  // タブが変更されたらlocalStorageに保存
+  useEffect(() => {
+    localStorage.setItem('activeTab', tab);
+  }, [tab]);
+
   useEffect(() => {
     const checkUserStatus = async (isInitial = false) => {
       const loggedInUser = localStorage.getItem('loggedInUser');
@@ -123,17 +144,14 @@ export default function DashboardPage() {
         return true;
       } catch (err) {
         console.error("ユーザー確認エラー:", err);
-        return true; // ネットワークエラー時はログアウトしない
+        return true;
       }
     };
 
-    // 初回チェック
     checkUserStatus(true);
-
-    // 定期チェック（30秒ごと）
     const intervalId = setInterval(() => {
       checkUserStatus(false);
-    }, 30000);
+    }, 5000);
 
     return () => clearInterval(intervalId);
   }, [router, performLogout]);
@@ -184,7 +202,6 @@ export default function DashboardPage() {
       {isMenuOpen && <div className={styles.overlay} onClick={() => setIsMenuOpen(false)} />}
 
       <div className={`${styles.menues} ${isMenuOpen ? styles.menuOpen : ''}`}>
-        {/* ログインユーザー情報エリアの改善 */}
         <div className={styles.userInfoWrapper} style={{ 
           marginTop: '40px', 
           padding: '15px 10px', 
@@ -204,14 +221,13 @@ export default function DashboardPage() {
             {user}
           </div>
           
-          {/* 権限ラベルの表示 */}
           <span className={styles.statusLabel} style={{ 
             background: isAdmin ? '#ffebeb' : '#eef2f8', 
             color: isAdmin ? '#d32f2f' : '#4a6fa5',
             fontSize: '11px',
             padding: '3px 10px',
             fontWeight: 'bold',
-            borderRadius: '12px', // 少し丸みをつけてラベルらしく
+            borderRadius: '12px',
             display: 'inline-block'
           }}>
             {isAdmin ? '管理者' : '一般ユーザー'}
@@ -320,7 +336,6 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* ★ 申請タブの出し分けロジック ★ */}
         {tab === 'REQUESTS' && (
           <div className={styles.tabContent}>
             {isAdmin ? <AdminRequests /> : <UserRequests user={user!} />}
@@ -334,7 +349,6 @@ export default function DashboardPage() {
         )}
       </main>
 
-      {/* 詳細表示モーダル (既存のまま) */}
       {selectedItem && (
         <div className={styles.modalOverlay} onClick={() => setSelectedItem(null)}>
           <div className={styles.infoCard} onClick={(e) => e.stopPropagation()}>
@@ -347,7 +361,7 @@ export default function DashboardPage() {
               <div className={styles.infoRow}><label>資産コード</label><span>{selectedItem.assetCode || '-'}</span></div>
               <div className={styles.infoRow}><label>資産名</label><span>{selectedItem.name}</span></div>
               <div className={styles.infoRow}><label>取得価額</label><span>{selectedItem.acquisitionCost?.toLocaleString()}円</span></div>
-              <div className={styles.infoRow}><label>使用者</label><span>{selectedItem.manager || '-'}</span></div>
+              <div className={styles.infoRow}><label>作成者</label><span>{selectedItem.ownerid || '-'}</span></div>
               <div className={styles.infoRow}><label>最終編集者</label><span>{selectedItem.updatedBy || '-'}</span></div>
               <div className={styles.infoRow}><label>最終更新日時</label><span>{formatDateTime(selectedItem.updatedAt)}</span></div>
             </div>
@@ -358,7 +372,6 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* 各種モーダル */}
       {isModalOpen && <EditItems onClose={() => { setIsModalOpen(false); setEditingItem(null); }} onSave={handleSave} ownerId={user!} initialItem={editingItem} />}
       {transferTarget && <TransferModal itemId={transferTarget.id} currentManager={transferTarget.manager} onClose={() => setTransferTarget(null)} onUpdated={handleReload} userId={user!} />}
       {requestTarget && <RequestModal itemId={requestTarget.id} requesterId={user!} onClose={() => setRequestTarget(null)} onSubmitted={() => {}} />}
