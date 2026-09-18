@@ -297,3 +297,124 @@ test('asset creation preserves zero and large cost strings, rejects unsafe numbe
   assert.equal((await s.route('items').POST(s.request('/api/items', 'POST', { assetCode: 'A', name: 'asset', acquisitionCost: 9007199254740992 }))).status, 400);
 });
 
+test('asset update refuses to overwrite a concurrent edit', async () => {
+  const stored = { ...item, updatedAt: new Date('2026-09-19T00:00:00.000Z') };
+  let written;
+  const s = setup({ items: {
+    // 更新日時が一致する行だけを更新するため、一致しなければ count は 0 になる
+    updateMany: async ({ where, data }) => {
+      if (where.updatedAt?.getTime() !== stored.updatedAt.getTime()) return { count: 0 };
+      written = data;
+      return { count: 1 };
+    },
+    findUnique: async () => stored,
+  } });
+  const payload = { id: 10, assetCode: 'A', name: 'asset', stock: 1 };
+
+  const stale = await s.route('items').PUT(s.request('/api/items', 'PUT', { ...payload, expectedUpdatedAt: '2026-09-18T00:00:00.000Z' }));
+  assert.equal(stale.status, 409);
+  assert.equal(written, undefined, '競合時は書き込まない');
+  assert.equal((await stale.json()).current.id, 10, '最新の内容を返す');
+
+  const fresh = await s.route('items').PUT(s.request('/api/items', 'PUT', { ...payload, expectedUpdatedAt: '2026-09-19T00:00:00.000Z' }));
+  assert.equal(fresh.status, 200);
+  assert.equal(written.name, 'asset');
+});
+
+test('asset patch refuses to overwrite a concurrent edit', async () => {
+  let written;
+  const s = setup({ items: {
+    updateMany: async ({ where, data }) => (where.updatedAt ? { count: 0 } : (written = data, { count: 1 })),
+    findUnique: async () => item,
+  } });
+  const response = await s.route('items').PATCH(s.request('/api/items', 'PATCH', { id: 10, location: 'moved', expectedUpdatedAt: '2026-09-18T00:00:00.000Z' }));
+  assert.equal(response.status, 409);
+  assert.equal(written, undefined);
+});
+
+test('the last administrator cannot be deleted or demoted', async () => {
+  const build = () => {
+    const accounts = {
+      findUnique: async ({ where }) => [admin, user].find(a => (where.id ? a.id === where.id : a.userid === where.userid)) ?? null,
+      findFirst: async () => null,
+      count: async () => 0, // 削除・降格の結果、管理者が残らない状態
+      delete: async () => ({}),
+      update: async ({ data }) => ({ id: 1, userid: 'admin', isadmin: data.isadmin ?? true }),
+    };
+    const items = { findMany: async () => [], updateMany: async () => ({ count: 0 }) };
+    return setup({ accounts, items, $transaction: async fn => fn({ accounts, items, requests: { updateMany: async () => ({}) }, inventoryRecords: { updateMany: async () => ({}) }, inventoryRequests: { updateMany: async () => ({}) }, inventoryRounds: { updateMany: async () => ({}) } }) });
+  };
+
+  const deleteCase = build();
+  const deleted = await deleteCase.route('accounts').DELETE(deleteCase.request('/api/accounts?id=1', 'DELETE'));
+  assert.equal(deleted.status, 409);
+  assert.match((await deleted.json()).error, /最後の管理者/);
+
+  const demoteCase = build();
+  const demoted = await demoteCase.route('accounts').PATCH(demoteCase.request('/api/accounts', 'PATCH', { id: 1, isadmin: false }));
+  assert.equal(demoted.status, 409);
+  assert.match((await demoted.json()).error, /最後の管理者/);
+});
+
+test('an administrator can be deleted while another administrator remains', async () => {
+  const second = { id: 3, userid: 'admin2', password: 'test-password', isadmin: true, department: 'CS' };
+  let deletedId;
+  const accounts = {
+    findUnique: async ({ where }) => [admin, user, second].find(a => (where.id ? a.id === where.id : a.userid === where.userid)) ?? null,
+    count: async () => 1,
+    delete: async ({ where }) => { deletedId = where.id; return {}; },
+  };
+  const s = setup({
+    items: { findMany: async () => [] },
+    accounts,
+    $transaction: async fn => fn({ accounts }),
+  });
+  const response = await s.route('accounts').DELETE(s.request('/api/accounts?id=3', 'DELETE'));
+  assert.equal(response.status, 200);
+  assert.equal(deletedId, 3);
+});
+
+test('a resent request with the same key is stored only once', async () => {
+  const key = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
+  const rows = [];
+  const s = setup({
+    items: { findUnique: async () => item },
+    requests: {
+      findUnique: async ({ where }) => rows.find(r => r.clientRequestId === where.clientRequestId) ?? null,
+      create: async ({ data }) => {
+        if (rows.some(r => r.clientRequestId === data.clientRequestId && data.clientRequestId)) {
+          const conflict = new Error('unique'); conflict.code = 'P2002'; throw conflict;
+        }
+        const row = { id: rows.length + 1, ...data };
+        rows.push(row);
+        return row;
+      },
+    },
+  });
+  const body = { itemId: 10, type: 'REPAIR', note: 'こわれた', clientRequestId: key };
+
+  const first = await s.route('requests').POST(s.request('/api/requests', 'POST', body, user));
+  assert.equal(first.status, 201);
+
+  // 通信結果が届かず利用者が再送した場合
+  const second = await s.route('requests').POST(s.request('/api/requests', 'POST', body, user));
+  assert.equal(second.status, 200);
+  assert.equal((await second.json()).duplicate, true);
+  assert.equal(rows.length, 1, '同じ送信は1件として扱う');
+
+  // 識別番号が違えば別の申請として登録される
+  await s.route('requests').POST(s.request('/api/requests', 'POST', { ...body, clientRequestId: `${key}-2` }, user));
+  assert.equal(rows.length, 2);
+});
+
+test('inventory approval applied by another administrator is not applied twice', async () => {
+  let applied;
+  const s = setup({
+    inventoryRecords: { findUnique: async () => ({ id: 1, itemId: 10, status: 'PENDING', newStock: 0, ownerId: 'user', newStatus: 'USED', newLocation: 'new-room', round: { isCurrent: true } }) },
+    // 確認から更新までの間に他の管理者が適用した状況
+    $transaction: async fn => fn({ items: { update: async ({ data }) => { applied = data; } }, inventoryRecords: { updateMany: async () => ({ count: 0 }) } }),
+  });
+  const response = await s.route('inventoryrequests').PATCH(s.request('/api/inventoryrequests', 'PATCH', { recordId: 1, action: 'APPROVE_SINGLE' }));
+  assert.equal(response.status, 409);
+  assert.equal(applied, undefined, '二重に台帳へ反映しない');
+});

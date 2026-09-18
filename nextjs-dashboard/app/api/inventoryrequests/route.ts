@@ -1,14 +1,17 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient, AssetStatus } from '@prisma/client';
-import { userExists, unauthorizedResponse } from '../utils/validateUser';
-
-const prisma = new PrismaClient();
+import { prisma } from '../utils/prisma';
+import { authorize, forbidden, ownsItem } from '../utils/auth';
+import { json } from '../utils/json';
+import { NextRequest } from 'next/server';
+import { AssetStatus } from '@prisma/client';
 
 /**
  * 【GET】棚卸し報告一覧、ユーザー別進捗統計、および現在のラウンド情報を取得
  */
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const auth = await authorize(req, false);
+    if (auth.response) return auth.response;
+    const actor = auth.account;
     // 1. 現在アクティブな棚卸しラウンドを取得
     const currentRound = await prisma.inventoryRounds.findFirst({
       where: { isCurrent: true },
@@ -17,16 +20,25 @@ export async function GET() {
 
     // アクティブなラウンドがない場合は早期リターン
     if (!currentRound) {
-      return NextResponse.json({ 
-        requests: [], 
-        userStats: {}, 
-        currentRound: null 
+      return json({
+        requests: [],
+        userStats: {},
+        currentRound: null
       });
+    }
+
+    if (!actor.isadmin) {
+      const requests = await prisma.inventoryRecords.findMany({
+        where: { roundId: currentRound.id, ownerId: actor.userid },
+        include: { item: true, round: true },
+        orderBy: { confirmedAt: 'desc' },
+      });
+      return json({ requests, userStats: {}, currentRound });
     }
 
     // 2. 今回のラウンドの全回答を取得
     const currentRecords = await prisma.inventoryRecords.findMany({
-      where: { roundId: currentRound.id },
+      where: { roundId: currentRound.id, ...(actor.isadmin ? {} : { ownerId: actor.userid }) },
       include: {
         item: true,
         round: true // フロントエンドでタイトルを引くため
@@ -49,7 +61,7 @@ export async function GET() {
       }
     });
 
-    const userStats: Record<string, any> = {};
+    const userStats: Record<string, any> = Object.create(null);
 
     // 5. 統計の集計ロジック
     // 全資産から「本来報告すべき件数」をユーザーごとにセット
@@ -75,15 +87,15 @@ export async function GET() {
     });
 
     // currentRoundを明示的に返すことで、報告0件でもタイトルが表示可能になる
-    return NextResponse.json({ 
-      requests: currentRecords, 
+    return json({
+      requests: currentRecords,
       userStats,
-      currentRound 
+      currentRound
     }, { status: 200 });
 
   } catch (e) {
     console.error('Inventory GET error:', e);
-    return NextResponse.json({ error: 'データ取得に失敗しました', userStats: {} }, { status: 500 });
+    return json({ error: 'データ取得に失敗しました', userStats: {} }, { status: 500 });
   }
 }
 
@@ -92,13 +104,21 @@ export async function GET() {
  */
 export async function POST(req: NextRequest) {
   try {
+    const auth = await authorize(req, false);
+    if (auth.response) return auth.response;
+    const actor = auth.account;
     const body = await req.json();
-    const { itemId, userId, newStatus, newLocation, newStock } = body;
+    const { itemId, newStatus, newLocation, newStock } = body;
+    const userId = actor.userid;
 
-    // ユーザーの存在確認
-    if (!await userExists(userId)) {
-      return unauthorizedResponse();
+    if (!Number.isSafeInteger(Number(itemId)) || Number(itemId) <= 0 ||
+        (newStatus != null && !Object.values(AssetStatus).includes(newStatus)) ||
+        (newStock != null && (!Number.isInteger(Number(newStock)) || Number(newStock) < 0))) {
+      return json({ error: '報告内容が無効です。' }, { status: 400 });
     }
+    const item = await prisma.items.findUnique({ where: { id: Number(itemId) } });
+    if (!item) return json({ error: '資産が見つかりません。' }, { status: 404 });
+    if (!ownsItem(actor, item)) return forbidden();
 
     const currentRound = await prisma.inventoryRounds.findFirst({
       where: { isCurrent: true },
@@ -106,7 +126,7 @@ export async function POST(req: NextRequest) {
     });
 
     if (!currentRound) {
-      return NextResponse.json({ error: '現在アクティブな棚卸し期間がありません。' }, { status: 400 });
+      return json({ error: '現在アクティブな棚卸し期間がありません。' }, { status: 400 });
     }
 
     // 既存のレコードを確認（再申請依頼中の場合は更新）
@@ -126,9 +146,9 @@ export async function POST(req: NextRequest) {
         where: { id: existingRecord.id },
         data: {
           ownerId: userId,
-          newLocation: newLocation,
-          newStatus: newStatus as AssetStatus,
-          newStock: newStock != null ? Number(newStock) : undefined,
+          newLocation: newLocation === undefined ? item.location : newLocation,
+          newStatus: (newStatus ?? item.status) as AssetStatus,
+          newStock: newStock != null ? Number(newStock) : item.stock,
           status: 'PENDING',
           isApproved: false,
           confirmedAt: new Date()
@@ -139,9 +159,9 @@ export async function POST(req: NextRequest) {
       record = await prisma.inventoryRecords.create({
         data: {
           ownerId: userId,
-          newLocation: newLocation,
-          newStatus: newStatus as AssetStatus,
-          newStock: newStock != null ? Number(newStock) : undefined,
+          newLocation: newLocation === undefined ? item.location : newLocation,
+          newStatus: (newStatus ?? item.status) as AssetStatus,
+          newStock: newStock != null ? Number(newStock) : item.stock,
           isApproved: false,
           status: 'PENDING',
           item: { connect: { id: Number(itemId) } },
@@ -149,13 +169,13 @@ export async function POST(req: NextRequest) {
         } as any,
       });
     } else {
-      return NextResponse.json({ error: '既に報告済みです。' }, { status: 400 });
+      return json({ error: '既に報告済みです。' }, { status: 400 });
     }
 
-    return NextResponse.json({ record }, { status: 201 });
+    return json({ record }, { status: 201 });
   } catch (e) {
     console.error('Inventory POST error:', e);
-    return NextResponse.json({ error: '報告の登録に失敗しました。' }, { status: 500 });
+    return json({ error: '報告の登録に失敗しました。' }, { status: 500 });
   }
 }
 
@@ -164,19 +184,35 @@ export async function POST(req: NextRequest) {
  */
 export async function PATCH(req: NextRequest) {
   try {
+    const auth = await authorize(req, true);
+    if (auth.response) return auth.response;
     const { userId, recordId, action } = await req.json();
 
     // 個別適用
     if (action === 'APPROVE_SINGLE' && recordId) {
       const record = await prisma.inventoryRecords.findUnique({
-        where: { id: Number(recordId) }
+        where: { id: Number(recordId) },
+        include: { round: true }
       });
 
       if (!record) {
-        return NextResponse.json({ error: 'レコードが見つかりません。' }, { status: 404 });
+        return json({ error: 'レコードが見つかりません。' }, { status: 404 });
       }
 
-      await prisma.$transaction(async (tx) => {
+      if (!record.round.isCurrent || record.status !== 'PENDING') {
+        return json({ error: '現在の未適用報告のみ適用できます。' }, { status: 409 });
+      }
+
+      // 状態確認と更新の間に他の管理者が適用した場合に備え、
+      // 「PENDING のままであること」を条件に更新し、取れたときだけ台帳へ反映する。
+      const applied = await prisma.$transaction(async (tx) => {
+        const claimed = await tx.inventoryRecords.updateMany({
+          where: { id: Number(recordId), status: 'PENDING' } as any,
+          data: { isApproved: true, status: 'APPROVED' } as any
+        });
+
+        if (claimed.count === 0) return false;
+
         await tx.items.update({
           where: { id: (record as any).itemId },
           data: {
@@ -187,37 +223,45 @@ export async function PATCH(req: NextRequest) {
           }
         });
 
-        await tx.inventoryRecords.update({
-          where: { id: Number(recordId) },
-          data: {
-            isApproved: true,
-            status: 'APPROVED'
-          } as any
-        });
+        return true;
       });
 
-      return NextResponse.json({ success: true });
+      if (!applied) {
+        return json({ error: 'この報告は既に他の操作で処理されています。画面を更新して最新の状態を確認してください。' }, { status: 409 });
+      }
+
+      return json({ success: true });
     }
 
     // 再申請依頼
     if (action === 'REQUEST_RESUBMIT' && recordId) {
       const record = await prisma.inventoryRecords.findUnique({
-        where: { id: Number(recordId) }
+        where: { id: Number(recordId) },
+        include: { round: true }
       });
 
       if (!record) {
-        return NextResponse.json({ error: 'レコードが見つかりません。' }, { status: 404 });
+        return json({ error: 'レコードが見つかりません。' }, { status: 404 });
       }
 
-      await prisma.inventoryRecords.update({
-        where: { id: Number(recordId) },
+      if (!record.round.isCurrent) {
+        return json({ error: '終了済みの棚卸しです。' }, { status: 409 });
+      }
+
+      // 判定時点の状態から変わっていないことを条件にする。
+      const requested = await prisma.inventoryRecords.updateMany({
+        where: { id: Number(recordId), status: record.status } as any,
         data: {
           status: 'RESUBMIT_REQUESTED',
           isApproved: false
         } as any
       });
 
-      return NextResponse.json({ success: true });
+      if (requested.count === 0) {
+        return json({ error: 'この報告は既に他の操作で処理されています。画面を更新して最新の状態を確認してください。' }, { status: 409 });
+      }
+
+      return json({ success: true });
     }
 
     // 一括適用
@@ -231,12 +275,26 @@ export async function PATCH(req: NextRequest) {
       });
 
       if (pendingRecords.length === 0) {
-        return NextResponse.json({ message: '適用対象の未承認データがありません。' });
+        return json({ message: '適用対象の未承認データがありません。' });
       }
 
-      // トランザクションですべての資産台帳(Items)を更新
-      await prisma.$transaction(async (tx) => {
+      // 1件ずつ「PENDING のままであること」を条件に確保してから台帳へ反映する。
+      // 他の管理者が同時に適用した分は二重に反映せず、件数として利用者へ伝える。
+      const { applied, skipped } = await prisma.$transaction(async (tx) => {
+        let applied = 0;
+        let skipped = 0;
+
         for (const record of pendingRecords) {
+          const claimed = await tx.inventoryRecords.updateMany({
+            where: { id: record.id, status: 'PENDING' } as any,
+            data: { isApproved: true, status: 'APPROVED' } as any
+          });
+
+          if (claimed.count === 0) {
+            skipped += 1;
+            continue;
+          }
+
           await tx.items.update({
             where: { id: (record as any).itemId },
             data: {
@@ -246,27 +304,21 @@ export async function PATCH(req: NextRequest) {
               updatedBy: record.ownerId
             }
           });
+          applied += 1;
         }
 
-        // 報告レコードを「承認済み」に変更
-        await tx.inventoryRecords.updateMany({
-          where: {
-            ownerId: userId,
-            round: { isCurrent: true },
-            status: 'PENDING'
-          },
-          data: {
-            isApproved: true,
-            status: 'APPROVED'
-          } as any
-        });
+        return { applied, skipped };
       });
 
-      return NextResponse.json({ success: true });
+      if (applied === 0) {
+        return json({ error: 'これらの報告は既に他の操作で処理されています。画面を更新して最新の状態を確認してください。' }, { status: 409 });
+      }
+
+      return json({ success: true, applied, skipped });
     }
-    return NextResponse.json({ error: '無効なアクションです。' }, { status: 400 });
+    return json({ error: '無効なアクションです。' }, { status: 400 });
   } catch (e) {
     console.error('Inventory PATCH error:', e);
-    return NextResponse.json({ error: '処理に失敗しました。' }, { status: 500 });
+    return json({ error: '処理に失敗しました。' }, { status: 500 });
   }
 }

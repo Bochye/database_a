@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import styles from './edititems.module.css';
+import { apiFetch, ApiError } from '../app/utils/apiClient';
 
 interface AccountOption {
   id: number;
@@ -15,9 +16,11 @@ interface Props {
   onClose: () => void;
   onUpdated: () => void;
   userId: string;
+  // 引継ぎ開始時点の更新日時。サーバー側で照合して同時更新の上書きを防ぐ。
+  expectedUpdatedAt?: string | null;
 }
 
-export default function TransferModal({ itemId, currentManager, onClose, onUpdated, userId }: Props) {
+export default function TransferModal({ itemId, currentManager, onClose, onUpdated, userId, expectedUpdatedAt }: Props) {
   const [manager, setManager] = useState(''); // 新しい管理者は空で開始
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -33,11 +36,10 @@ export default function TransferModal({ itemId, currentManager, onClose, onUpdat
   useEffect(() => {
     const loadAccounts = async () => {
       try {
-        const res = await fetch('/api/accounts');
-        const data = await res.json();
+        const data = await apiFetch<{ accounts: AccountOption[] }>('/api/accounts');
         setAccounts(data.accounts || []);
       } catch (error) {
-        console.error('Failed to load accounts');
+        setError(error instanceof ApiError ? `使用者候補の取得に失敗しました。${error.message}` : '使用者候補の取得に失敗しました。');
       }
     };
     loadAccounts();
@@ -102,18 +104,16 @@ export default function TransferModal({ itemId, currentManager, onClose, onUpdat
     setError(null);
 
     try {
-      const res = await fetch('/api/items', {
+      await apiFetch('/api/items', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: itemId, manager, updatedBy: userId }),
+        json: {
+          id: itemId,
+          manager,
+          updatedBy: userId,
+          ...(expectedUpdatedAt ? { expectedUpdatedAt } : {}),
+        },
+        fallbackMessage: '引継ぎに失敗しました',
       });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        // API側で返した「ユーザーがいません」というエラーをセット
-        throw new Error(data.error || '引継ぎに失敗しました');
-      }
 
       alert('引継ぎが完了しました');
       onUpdated();

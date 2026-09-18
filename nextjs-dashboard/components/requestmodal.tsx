@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import styles from './edititems.module.css';
+import { apiFetch, ApiError, newRequestKey } from '../app/utils/apiClient';
 
 type RequestType = 'REPAIR' | 'DISPOSAL' | 'SEAL_REISSUE';
 
@@ -18,34 +19,36 @@ export default function RequestModal({ itemId, requesterId, onClose, onSubmitted
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // この申請の識別番号。通信エラーで再送しても同じ番号を使うため、
+  // サーバー側で「同じ送信の再試行」と判定され二重登録にならない。
+  const requestKeyRef = useRef<string>(newRequestKey());
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError(null);
 
     try {
-      const res = await fetch('/api/requests', {
+      const data = await apiFetch<{ duplicate?: boolean }>('/api/requests', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         // note は自動的に DB の note カラム（申請者用）へ保存されます
-        body: JSON.stringify({ 
-          itemId, 
-          requesterId, 
-          type, 
-          note 
-        }),
+        json: {
+          itemId,
+          requesterId,
+          type,
+          note,
+          clientRequestId: requestKeyRef.current,
+        },
+        fallbackMessage: '申請の送信に失敗しました',
       });
-
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || '申請の送信に失敗しました');
-      }
 
       onSubmitted();
       onClose();
-      alert('申請を送信しました');
+      alert(data?.duplicate ? 'この申請は既に送信済みです。' : '申請を送信しました');
     } catch (err: any) {
-      setError(err.message);
+      setError(err instanceof ApiError && err.retryable
+        ? `${err.message}（同じ内容で再送しても二重登録にはなりません）`
+        : err.message);
     } finally {
       setIsLoading(false);
     }

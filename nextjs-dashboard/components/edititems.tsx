@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import styles from './edititems.module.css';
 // 自動生成関数をインポート（パスは環境に合わせて調整してください）
 import { generateAssetCode } from '../app/api/utils/generateAssetCode';
+import { apiFetch, ApiError } from '../app/utils/apiClient';
 
 interface AccountOption {
   id: number;
@@ -25,6 +26,8 @@ export interface ClientItem {
   ownerId: string;
   createdAt: string;
   stock?: number;
+  // 楽観ロック用。編集を開始した時点の更新日時をそのままサーバーへ返す。
+  updatedAt?: string | null;
 }
 
 interface EditItemsProps {
@@ -199,8 +202,11 @@ export default function EditItems({ onClose, onSave, ownerId, initialItem }: Edi
     try {
       // 1. 使用者の存在チェック
       if (formData.manager) {
-        const checkRes = await fetch(`/api/accounts?userid=${formData.manager}`);
-        const checkData = await checkRes.json();
+        // 通信失敗を「未登録」と誤って表示しないよう、失敗理由をそのまま伝える。
+        const checkData = await apiFetch<{ accounts: any[] }>(
+          `/api/accounts?userid=${encodeURIComponent(formData.manager)}`,
+          { fallbackMessage: '使用者の確認に失敗しました。通信環境を確認してもう一度お試しください。' },
+        );
         const userExists = checkData.accounts?.some((u: any) => u.userid === formData.manager);
 
         if (!userExists) {
@@ -230,24 +236,19 @@ export default function EditItems({ onClose, onSave, ownerId, initialItem }: Edi
         location: formData.location || undefined,
         status: formData.status,
         stock: formData.stock,
-        ownerid: ownerId,
+        ownerid: initialItem?.ownerId ?? ownerId,
         updatedBy: ownerId,
+        // 編集開始時点の更新日時。サーバー側で照合し、他の人の編集を上書きしない。
+        ...(isEditing && initialItem?.updatedAt ? { expectedUpdatedAt: initialItem.updatedAt } : {}),
       };
 
       // 4. API送信
       const method = isEditing ? 'PUT' : 'POST';
-      const res = await fetch('/api/items', {
+      const { item: serverItem } = await apiFetch<{ item: any }>('/api/items', {
         method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        json: payload,
+        fallbackMessage: `資産の${actionText}に失敗しました。`,
       });
-
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.error || `資産の${actionText}に失敗しました。`);
-      }
-
-      const { item: serverItem } = await res.json();
       
       // クライアント側へ返す型へ整形
       const clientItem: ClientItem = {
@@ -264,12 +265,18 @@ export default function EditItems({ onClose, onSave, ownerId, initialItem }: Edi
         ownerId: serverItem.ownerid,
         createdAt: serverItem.createdAt,
         stock: serverItem.stock,
+        updatedAt: serverItem.updatedAt,
       };
 
       onSave(clientItem);
       onClose();
     } catch (err: any) {
-      setError(err.message || '予期せぬエラーが発生しました。');
+      // 409 は他の利用者が先に保存した場合。上書きせず、読み込み直しを促す。
+      if (err instanceof ApiError && err.status === 409) {
+        setError(`${err.message}（保存は行われていません）`);
+      } else {
+        setError(err.message || '予期せぬエラーが発生しました。');
+      }
     } finally {
       setIsLoading(false);
     }
