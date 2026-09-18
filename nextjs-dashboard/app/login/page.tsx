@@ -37,14 +37,18 @@ export default function LoginPage() {
     if (!str_id || !str_pass) return;
     
     setLoginStatus('loading');
-    const url = `/api/search_user?user=${encodeURIComponent(str_id)}&pass=${encodeURIComponent(str_pass)}`;
+    const url = '/api/search_user';
     
     try {
-      const response = await fetch(url);
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user: str_id, pass: str_pass }),
+      });
       const result = await response.json();
 
       if (result.success === true) {
-        localStorage.setItem('loggedInUser', str_id);
+        localStorage.setItem('loggedInUser', result.userid);
         localStorage.setItem('isAdmin', result.isAdmin ? 'true' : 'false');
         router.push('/dashboard');
       } else {

@@ -1,0 +1,38 @@
+{
+  "root": true,
+  "env": {
+    "browser": true,
+    "node": true,
+    "es2021": true
+  },
+  "parser": "@typescript-eslint/parser",
+  "parserOptions": {
+    "ecmaVersion": 2020,
+    "sourceType": "module",
+    "ecmaFeatures": {
+      "jsx": true
+    }
+  },
+  "plugins": [
+    "@typescript-eslint",
+    "react"
+  ],
+  "extends": [
+    "eslint:recommended"
+  ],
+  "rules": {
+    "no-unused-vars": "off",
+    "no-undef": "off",
+    "no-irregular-whitespace": [
+      "warn",
+      {
+        "skipComments": true
+      }
+    ]
+  },
+  "ignorePatterns": [
+    ".next/",
+    "node_modules/",
+    "next-env.d.ts"
+  ]
+}

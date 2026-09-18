@@ -1,9 +1,5 @@
-import { PrismaClient } from '@prisma/client';
+import { prisma } from './prisma';
 import { NextResponse } from 'next/server';
-
-const globalForPrisma = global as unknown as { prisma: PrismaClient };
-const prisma = globalForPrisma.prisma || new PrismaClient();
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
 
 /**
  * ユーザーの存在を確認する
