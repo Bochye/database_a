@@ -1,7 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from '../utils/prisma';
+import { authorize } from '../utils/auth';
+import { json } from '../utils/json';
+import { NextRequest } from 'next/server';
 
 /**
  * 管理者が新しい棚卸しラウンドを開始するAPI (POST)
@@ -9,10 +9,14 @@ const prisma = new PrismaClient();
  */
 export async function POST(req: NextRequest) {
   try {
-    const { title, adminId, carryOver } = await req.json();
+    const auth = await authorize(req, true);
+    if (auth.response) return auth.response;
+    const actor = auth.account;
+    const { title, carryOver } = await req.json();
+    const adminId = actor.userid;
 
     if (!title || !adminId) {
-      return NextResponse.json({ error: 'タイトルと管理者IDは必須です。' }, { status: 400 });
+      return json({ error: 'タイトルと管理者IDは必須です。' }, { status: 400 });
     }
 
     // トランザクションで一括処理
@@ -99,7 +103,7 @@ export async function POST(req: NextRequest) {
       message = `前回の未適用データ ${result.deletedCount} 件を削除しました。`;
     }
 
-    return NextResponse.json({
+    return json({
       success: true,
       round: result.newRound,
       carriedOverCount: result.carriedOverCount,
@@ -108,9 +112,7 @@ export async function POST(req: NextRequest) {
     }, { status: 201 });
   } catch (error) {
     console.error('InventoryRound POST Error:', error);
-    return NextResponse.json({ error: '棚卸しのリセットに失敗しました。' }, { status: 500 });
-  } finally {
-    await prisma.$disconnect();
+    return json({ error: '棚卸しのリセットに失敗しました。' }, { status: 500 });
   }
 }
 
@@ -118,8 +120,10 @@ export async function POST(req: NextRequest) {
  * 現在アクティブなラウンド情報を取得するAPI (GET)
  * 未適用データの件数も返す（新規開始時の引き継ぎ確認用）
  */
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const auth = await authorize(req, false);
+    if (auth.response) return auth.response;
     // 現在アクティブなラウンド
     const currentRound = await prisma.inventoryRounds.findFirst({
       where: { isCurrent: true },
@@ -148,11 +152,9 @@ export async function GET() {
       });
     }
 
-    return NextResponse.json({ currentRound, pendingCount }, { status: 200 });
+    return json({ currentRound, pendingCount }, { status: 200 });
   } catch (error) {
-    return NextResponse.json({ error: '取得に失敗しました。' }, { status: 500 });
-  } finally {
-    await prisma.$disconnect();
+    return json({ error: '取得に失敗しました。' }, { status: 500 });
   }
 }
 
@@ -162,6 +164,8 @@ export async function GET() {
  */
 export async function PATCH(req: NextRequest) {
   try {
+    const auth = await authorize(req, true);
+    if (auth.response) return auth.response;
     const body = await req.json();
     const { roundId } = body;
 
@@ -171,15 +175,13 @@ export async function PATCH(req: NextRequest) {
     });
 
     if (updated.count === 0) {
-      return NextResponse.json({ error: '終了する棚卸しが見つかりません。' }, { status: 404 });
+      return json({ error: '終了する棚卸しが見つかりません。' }, { status: 404 });
     }
 
-    return NextResponse.json({ success: true, message: '棚卸しを終了しました。' }, { status: 200 });
+    return json({ success: true, message: '棚卸しを終了しました。' }, { status: 200 });
   } catch (error) {
     console.error('InventoryRound PATCH Error:', error);
-    return NextResponse.json({ error: '棚卸しの終了に失敗しました。' }, { status: 500 });
-  } finally {
-    await prisma.$disconnect();
+    return json({ error: '棚卸しの終了に失敗しました。' }, { status: 500 });
   }
 }
 
@@ -189,6 +191,8 @@ export async function PATCH(req: NextRequest) {
  */
 export async function DELETE(req: NextRequest) {
   try {
+    const auth = await authorize(req, true);
+    if (auth.response) return auth.response;
     const { searchParams } = new URL(req.url);
     const roundId = searchParams.get('roundId');
 
@@ -212,11 +216,9 @@ export async function DELETE(req: NextRequest) {
       });
     });
 
-    return NextResponse.json({ success: true, message: '棚卸しをキャンセルしました。' }, { status: 200 });
+    return json({ success: true, message: '棚卸しをキャンセルしました。' }, { status: 200 });
   } catch (error: any) {
     console.error('InventoryRound DELETE Error:', error);
-    return NextResponse.json({ error: error.message || '棚卸しのキャンセルに失敗しました。' }, { status: 500 });
-  } finally {
-    await prisma.$disconnect();
+    return json({ error: error.message || '棚卸しのキャンセルに失敗しました。' }, { status: 500 });
   }
 }

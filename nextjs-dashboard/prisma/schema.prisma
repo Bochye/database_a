@@ -101,6 +101,8 @@ model Requests {
   adminNote    String?       // 管理者（Admin）からの備考・回答
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt  
+  // 送信ごとの識別番号。再送された同じ送信を1件として扱うために使う。
+  clientRequestId String?    @unique
   item         Items         @relation(fields: [itemId], references: [id])
 }
 

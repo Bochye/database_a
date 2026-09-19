@@ -1,12 +1,17 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient, AssetStatus } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from '../utils/prisma';
+import { authorize } from '../utils/auth';
+import { json } from '../utils/json';
+import { NextRequest } from 'next/server';
+import { AssetStatus } from '@prisma/client';
 
 export async function POST(req: NextRequest) {
   try {
+    const auth = await authorize(req, true);
+    if (auth.response) return auth.response;
+    const actor = auth.account;
     const body = await req.json();
-    const { itemId, userId, newStatus, newLocation } = body;
+    const { itemId, newStatus, newLocation } = body;
+    const userId = actor.userid;
 
     // 1. 現在アクティブな棚卸し期間（Round）を取得
     const currentRound = await prisma.inventoryRounds.findFirst({
@@ -15,7 +20,7 @@ export async function POST(req: NextRequest) {
     });
 
     if (!currentRound) {
-      return NextResponse.json({ error: '現在アクティブな棚卸し期間がありません。' }, { status: 400 });
+      return json({ error: '現在アクティブな棚卸し期間がありません。' }, { status: 400 });
     }
 
     const result = await prisma.$transaction(async (tx) => {
@@ -48,11 +53,9 @@ export async function POST(req: NextRequest) {
       return record;
     });
 
-    return NextResponse.json({ record: result }, { status: 201 });
+    return json({ record: result }, { status: 201 });
   } catch (e) {
     console.error(e);
-    return NextResponse.json({ error: '登録に失敗しました。' }, { status: 500 });
-  } finally {
-    await prisma.$disconnect();
+    return json({ error: '登録に失敗しました。' }, { status: 500 });
   }
 }

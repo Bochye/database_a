@@ -56,7 +56,9 @@ export default function EditUsers({ user, onClose, onSave }: EditUsersProps) {
     setError(null);
   }, [user, isEditMode]);
 
-  const performLogout = () => {
+  const performLogout = async () => {
+    const response = await fetch('/api/search_user', { method: 'DELETE' });
+    if (!response.ok) throw new Error('ログアウトに失敗しました。');
     localStorage.removeItem('loggedInUser');
     localStorage.removeItem('isAdmin');
     router.push('/login');
@@ -98,7 +100,7 @@ export default function EditUsers({ user, onClose, onSave }: EditUsersProps) {
       // 自分自身の情報を変更した場合は強制ログアウト
       if (isSelf && (userid !== user?.userid || password !== '')) {
         alert('ご自身のログイン情報を変更したため、再ログインが必要です。');
-        performLogout();
+        await performLogout();
         return;
       }
 
@@ -151,7 +153,7 @@ export default function EditUsers({ user, onClose, onSave }: EditUsersProps) {
       if (!res.ok) throw new Error(data.error || '削除に失敗しました');
 
       if (isSelf) {
-        performLogout();
+        await performLogout();
         return;
       }
 
@@ -182,7 +184,7 @@ export default function EditUsers({ user, onClose, onSave }: EditUsersProps) {
       if (!res.ok) throw new Error(data.error || '削除に失敗しました');
 
       if (isSelf) {
-        performLogout();
+        await performLogout();
         return;
       }
 

@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import styles from '../app/dashboard/page.module.css';
+import { apiFetch, ApiError } from '../app/utils/apiClient';
 
 interface InventoryItem {
   id: number;
@@ -29,6 +30,7 @@ export default function Inventory({ ownerId }: { ownerId: string }) {
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
   const [showFullDetail, setShowFullDetail] = useState(false); 
   const [roundTitle, setRoundTitle] = useState<string>('');
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const [newLocation, setNewLocation] = useState('');
   const [newStatus, setNewStatus] = useState('');
@@ -48,20 +50,28 @@ export default function Inventory({ ownerId }: { ownerId: string }) {
   const loadItems = async () => {
     setLoading(true);
     try {
-      const resItems = await fetch(`/api/items?isAdmin=false&ownerId=${ownerId}`);
-      const dataItems = await resItems.json();
+      const dataItems = await apiFetch<{ items: any[] }>(
+        `/api/items?isAdmin=false&ownerId=${encodeURIComponent(ownerId)}`,
+        { fallbackMessage: '資産データの取得に失敗しました。' },
+      );
       setItems((dataItems.items || []).filter((i: any) => i.status !== 'DISPOSED'));
+      setCompletedIds(new Set());
 
-      const resReq = await fetch('/api/inventoryrequests');
-      const dataReq = await resReq.json();
+      const dataReq = await apiFetch<{ currentRound?: { title?: string } }>(
+        '/api/inventoryrequests',
+        { fallbackMessage: '棚卸し情報の取得に失敗しました。' },
+      );
 
       if (dataReq.currentRound?.title) {
         setRoundTitle(dataReq.currentRound.title);
       } else {
         setRoundTitle('-');
       }
+      setLoadError(null);
     } catch (err) {
-      console.error("Fetch error:", err);
+      // 取得に失敗したことを「対象0件」と誤認させないため、理由を画面に出す。
+      setItems([]);
+      setLoadError(err instanceof ApiError ? err.message : 'データの取得に失敗しました。');
     } finally {
       setLoading(false);
     }
@@ -82,7 +92,7 @@ export default function Inventory({ ownerId }: { ownerId: string }) {
     setSelectedItem(item);
     setNewLocation(item.location || '');
     setNewStatus(item.status);
-    setNewStock(item.stock || 1);
+    setNewStock(item.stock ?? 1);
     setShowFullDetail(false);
   };
 
@@ -93,29 +103,24 @@ export default function Inventory({ ownerId }: { ownerId: string }) {
     if (!window.confirm(confirmMsg)) return;
 
     try {
-      const res = await fetch('/api/inventoryrequests', {
+      await apiFetch('/api/inventoryrequests', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+        json: {
           itemId: selectedItem.id,
           userId: ownerId,
           newStatus: newStatus,
           newLocation: newLocation,
-          newStock: newStock 
-        })
+          newStock: newStock
+        },
+        fallbackMessage: '送信に失敗しました。',
       });
 
-      if (res.ok) {
-        setCompletedIds(prev => new Set(prev).add(selectedItem.id));
-        setSelectedItem(null);
-        alert('棚卸し報告を完了しました。');
-        loadItems();
-      } else {
-        const errData = await res.json();
-        alert(errData.error || '送信に失敗しました。');
-      }
+      setCompletedIds(prev => new Set(prev).add(selectedItem.id));
+      setSelectedItem(null);
+      alert('棚卸し報告を完了しました。');
+      loadItems();
     } catch (err) {
-      alert('通信エラーが発生しました。');
+      alert(err instanceof ApiError ? err.message : '通信エラーが発生しました。');
     }
   };
 
@@ -169,6 +174,27 @@ export default function Inventory({ ownerId }: { ownerId: string }) {
         <p style={{ fontSize: '13px', color: '#666', marginBottom: '20px', textAlign: 'center' }}>
           ※資産を選択して現在の状況を報告してください。
         </p>
+
+        {loadError && (
+          <div
+            role="alert"
+            style={{
+              margin: '0 0 15px', padding: '12px 16px', borderRadius: '6px',
+              border: '1px solid #f5c2c7', background: '#fdf2f3', color: '#b02a37',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap',
+            }}
+          >
+            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0 }}>
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="8" x2="12" y2="12" />
+                <line x1="12" y1="16" x2="12.01" y2="16" />
+              </svg>
+              {loadError}
+            </span>
+            <button className={styles.reloadButton} onClick={loadItems} disabled={loading}>再試行</button>
+          </div>
+        )}
 
         {loading ? (
           <p>読み込み中...</p>

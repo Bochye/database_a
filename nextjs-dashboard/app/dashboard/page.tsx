@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import styles from './page.module.css';
+import { apiFetch, ApiError } from '../utils/apiClient';
 
 import EditItems, { ClientItem } from '../../components/edititems';
 import SearchBar, { SearchFilters } from '../../components/searchbar';
@@ -56,7 +57,14 @@ export default function DashboardPage() {
   const router = useRouter();
 
   // ログアウト時にタブ情報もクリアする
-  const performLogout = useCallback(() => {
+  const performLogout = useCallback(async () => {
+    try {
+      const res = await fetch('/api/search_user', { method: 'DELETE' });
+      if (!res.ok) throw new Error('Logout failed');
+    } catch {
+      alert('ログアウトに失敗しました。もう一度お試しください。');
+      return;
+    }
     localStorage.removeItem('loggedInUser');
     localStorage.removeItem('isAdmin');
     localStorage.removeItem('activeTab');
@@ -80,18 +88,18 @@ export default function DashboardPage() {
         params.set('currentUser', loggedInUser);
       }
 
-      const res = await fetch(`/api/items?${params.toString()}`);
-      if (res.status === 401 || res.status === 403) {
-        performLogout();
-        return;
-      }
-
-      if (!res.ok) throw new Error('Failed to fetch items');
-      const data = await res.json();
+      const data = await apiFetch<{ items: ItemRow[] }>(`/api/items?${params.toString()}`, {
+        fallbackMessage: '資産データの取得に失敗しました。',
+      });
       setItems(data.items);
       setCurrentFilters(filters);
     } catch (err) {
-      setError('資産データの取得に失敗しました。');
+      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+        performLogout();
+        return;
+      }
+      // 取得に失敗したことを「0件」と誤認させないため、一覧を空にせず理由を表示する。
+      setError(err instanceof ApiError ? err.message : '資産データの取得に失敗しました。');
     } finally {
       setIsLoading(false);
     }
@@ -117,40 +125,32 @@ export default function DashboardPage() {
   }, [tab]);
 
   useEffect(() => {
-    const checkUserStatus = async (isInitial = false) => {
-      const loggedInUser = localStorage.getItem('loggedInUser');
-      const adminFlag = localStorage.getItem('isAdmin') === 'true';
-
-      if (!loggedInUser) {
-        router.push('/login');
-        return false;
-      }
-
+    const checkUserStatus = async () => {
       try {
-        const res = await fetch(`/api/accounts?userid=${loggedInUser}`);
+        const res = await fetch('/api/search_user', { cache: 'no-store' });
+        if (res.status === 401 || res.status === 403) {
+          setUser(null);
+          localStorage.removeItem('loggedInUser');
+          localStorage.removeItem('isAdmin');
+          localStorage.removeItem('activeTab');
+          router.push('/login');
+          return;
+        }
+        if (!res.ok) return;
         const data = await res.json();
-        const userExists = data.accounts?.some((u: any) => u.userid === loggedInUser);
-
-        if (!res.ok || !userExists) {
-          alert('アカウントが削除されました。ログアウトします。');
-          performLogout();
-          return false;
-        }
-
-        if (isInitial) {
-          setUser(loggedInUser);
-          setIsAdmin(adminFlag);
-        }
-        return true;
+        localStorage.setItem('loggedInUser', data.userid);
+        localStorage.setItem('isAdmin', data.isAdmin ? 'true' : 'false');
+        setUser(data.userid);
+        setIsAdmin(data.isAdmin);
+        if (!data.isAdmin) setTab(current => current === 'USERS' ? 'ITEMS' : current);
       } catch (err) {
-        console.error("ユーザー確認エラー:", err);
-        return true;
+        console.error('ユーザー確認エラー:', err);
       }
     };
 
-    checkUserStatus(true);
+    checkUserStatus();
     const intervalId = setInterval(() => {
-      checkUserStatus(false);
+      checkUserStatus();
     }, 5000);
 
     return () => clearInterval(intervalId);
@@ -161,6 +161,23 @@ export default function DashboardPage() {
   }, [user, isAdmin, fetchItems]);
 
   const handleReload = useCallback(() => fetchItems(currentFilters), [fetchItems, currentFilters]);
+
+  // 削除は結果を確認してから再読み込みする。失敗した場合は理由を伝える。
+  const handleDelete = useCallback(async (item: ItemRow) => {
+    if (!confirm(`資産「${item.name}」を削除しますか？`)) return;
+    try {
+      await apiFetch(`/api/items?id=${item.id}`, {
+        method: 'DELETE',
+        fallbackMessage: '資産の削除に失敗しました。',
+      });
+    } catch (err) {
+      const message = err instanceof ApiError ? err.message : '資産の削除に失敗しました。';
+      alert(`${message}${err instanceof ApiError && err.retryable ? '\n\nもう一度お試しください。' : ''}`);
+      handleReload();
+      return;
+    }
+    handleReload();
+  }, [handleReload]);
 
   const handleSave = useCallback(() => {
     handleReload();
@@ -264,6 +281,27 @@ export default function DashboardPage() {
               </div>
             </div>
 
+            {error && (
+              <div
+                role="alert"
+                style={{
+                  margin: '0 0 12px', padding: '12px 16px', borderRadius: '6px',
+                  border: '1px solid #f5c2c7', background: '#fdf2f3', color: '#b02a37',
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap',
+                }}
+              >
+                <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0 }}>
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="8" x2="12" y2="12" />
+                    <line x1="12" y1="16" x2="12.01" y2="16" />
+                  </svg>
+                  {error}
+                </span>
+                <button onClick={handleReload} disabled={isLoading} className={styles.reloadButton}>再試行</button>
+              </div>
+            )}
+
             <div className={styles.tableContainer}>
               {isLoading && <div className={styles.tableInlineLoader}>読み込み中...</div>}
               <table className={`${styles.itemsTable} ${isLoading ? styles.loadingEffect : ''}`}>
@@ -306,7 +344,7 @@ export default function DashboardPage() {
                               </button>
                               <button onClick={(e) => {
                                 e.stopPropagation();
-                                if(confirm('削除しますか？')) fetch(`/api/items?id=${item.id}`, {method: 'DELETE'}).then(() => handleReload());
+                                handleDelete(item);
                               }} className={styles.deleteButton}>削除</button>
                             </>
                           ) : (
@@ -373,7 +411,7 @@ export default function DashboardPage() {
       )}
 
       {isModalOpen && <EditItems onClose={() => { setIsModalOpen(false); setEditingItem(null); }} onSave={handleSave} ownerId={user!} initialItem={editingItem} />}
-      {transferTarget && <TransferModal itemId={transferTarget.id} currentManager={transferTarget.manager} onClose={() => setTransferTarget(null)} onUpdated={handleReload} userId={user!} />}
+      {transferTarget && <TransferModal itemId={transferTarget.id} currentManager={transferTarget.manager} expectedUpdatedAt={transferTarget.updatedAt} onClose={() => setTransferTarget(null)} onUpdated={handleReload} userId={user!} />}
       {requestTarget && <RequestModal itemId={requestTarget.id} requesterId={user!} onClose={() => setRequestTarget(null)} onSubmitted={() => {}} />}
     </div>
   );
