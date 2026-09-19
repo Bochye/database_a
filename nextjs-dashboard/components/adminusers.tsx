@@ -3,6 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import styles from '../app/dashboard/page.module.css'; 
 import EditUsers from './editusers';
+import { apiFetch, ApiError } from '../app/utils/apiClient';
 
 type Account = {
   id: number;
@@ -25,21 +26,26 @@ export default function AdminUsers({ onUserUpdate }: AdminUsersProps) {
 
   const [searchName, setSearchName] = useState('');
   const [searchDept, setSearchDept] = useState('');
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // ユーザー一覧の取得、および必要に応じてDashboard側の資産一覧をリロード
   const load = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch('/api/accounts');
-      const data = await res.json();
+      const data = await apiFetch<{ accounts: Account[] }>('/api/accounts', {
+        fallbackMessage: 'ユーザー一覧の取得に失敗しました。',
+      });
       setUsers(data.accounts || []);
-      
+      setLoadError(null);
+
       // ユーザー情報（名前等）が変わった可能性があるため、Dashboard側の資産一覧も再読み込みさせる
       if (onUserUpdate) {
         onUserUpdate();
       }
     } catch (error) {
-      console.error('Failed to load users');
+      // 取得に失敗したことを「該当ユーザーなし」と誤認させないため、理由を画面に出す。
+      setUsers([]);
+      setLoadError(error instanceof ApiError ? error.message : 'ユーザー一覧の取得に失敗しました。');
     } finally {
       setIsLoading(false);
     }
@@ -55,19 +61,15 @@ export default function AdminUsers({ onUserUpdate }: AdminUsersProps) {
     if (!window.confirm(confirmMessage)) return;
 
     try {
-      const res = await fetch('/api/accounts', {
+      await apiFetch('/api/accounts', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: user.id, isadmin: !user.isadmin }),
+        json: { id: user.id, isadmin: !user.isadmin },
+        fallbackMessage: '更新に失敗しました',
       });
-
-      if (res.ok) {
-        load();
-      } else {
-        alert('更新に失敗しました');
-      }
+      load();
     } catch (error) {
-      alert('通信エラーが発生しました');
+      // 「最後の管理者は降格できません」などサーバー側の理由をそのまま伝える。
+      alert(error instanceof ApiError ? error.message : '通信エラーが発生しました');
     }
   };
 
@@ -112,6 +114,27 @@ export default function AdminUsers({ onUserUpdate }: AdminUsersProps) {
 
       <div className={styles.tableContainer}>
         <h3 style={{ marginBottom: '17px', color: '#4a6fa5', textAlign: 'center' }}>ユーザー情報の管理</h3>
+        {loadError && (
+          <div
+            role="alert"
+            style={{
+              margin: '0 0 15px', padding: '12px 16px', borderRadius: '6px',
+              border: '1px solid #f5c2c7', background: '#fdf2f3', color: '#b02a37',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap',
+            }}
+          >
+            <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0 }}>
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="8" x2="12" y2="12" />
+                <line x1="12" y1="16" x2="12.01" y2="16" />
+              </svg>
+              {loadError}
+            </span>
+            <button className={styles.reloadButton} onClick={load} disabled={isLoading}>再試行</button>
+          </div>
+        )}
+
         {isLoading ? (
           <p>読み込み中...</p>
         ) : (
