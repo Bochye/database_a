@@ -308,6 +308,11 @@ export async function PATCH(req: NextRequest) {
         }
 
         return { applied, skipped };
+      }, {
+        // 1件あたり2往復するため、件数が多いと既定の5秒では足りない。
+        // DBが遠い（Supabaseのプーラー経由）ぶんの往復遅延を見込んで広げる。
+        maxWait: 10_000,
+        timeout: 60_000,
       });
 
       if (applied === 0) {
